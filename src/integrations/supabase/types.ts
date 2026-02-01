@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      automations: {
+        Row: {
+          browserless_url: string
+          created_at: string
+          description: string | null
+          erp_url: string
+          id: string
+          instructions: string
+          is_active: boolean | null
+          name: string
+          sheets_url: string
+          steps: Json | null
+          updated_at: string
+        }
+        Insert: {
+          browserless_url: string
+          created_at?: string
+          description?: string | null
+          erp_url: string
+          id?: string
+          instructions: string
+          is_active?: boolean | null
+          name: string
+          sheets_url: string
+          steps?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          browserless_url?: string
+          created_at?: string
+          description?: string | null
+          erp_url?: string
+          id?: string
+          instructions?: string
+          is_active?: boolean | null
+          name?: string
+          sheets_url?: string
+          steps?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

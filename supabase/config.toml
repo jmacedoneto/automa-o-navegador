@@ -1,1 +1,4 @@
 project_id = "rkqhdawqzsezaoctrodv"
+
+[functions.generate-steps]
+verify_jwt = false
