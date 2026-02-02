@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import puppeteer from "https://deno.land/x/puppeteer@16.2.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,11 +12,20 @@ interface StartRecordingRequest {
   erpUrl: string;
 }
 
+interface BrowserlessSession {
+  browserId: string;
+  devtoolsFrontendUrl: string;
+  port?: number;
+  url?: string;
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  let browser: any = null;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -53,98 +63,114 @@ serve(async (req: Request) => {
       );
     }
 
-    // Clean the browserless URL
+    // Clean the browserless URL (remove protocol)
     const cleanBrowserlessUrl = browserlessUrl
       .replace('https://', '')
       .replace('http://', '')
       .replace('wss://', '')
       .replace('ws://', '');
 
-    // Generate a unique session ID
-    const sessionId = crypto.randomUUID();
+    console.log(`[start-recording] Connecting to Browserless: ${cleanBrowserlessUrl}`);
 
-    // Build the live viewer URL with the initial URL
-    // Browserless /live endpoint opens an interactive browser session
-    const encodedUrl = encodeURIComponent(erpUrl);
-    
-    // The live URL format for Browserless - navigates directly to the ERP
-    const liveUrl = browserlessToken
-      ? `https://${cleanBrowserlessUrl}/live?token=${browserlessToken}&--url=${encodedUrl}`
-      : `https://${cleanBrowserlessUrl}/live?--url=${encodedUrl}`;
-
-    // WebSocket endpoint for potential CDP interaction
+    // Build WebSocket URL for puppeteer connection
+    // Use headless=false to allow interactive session viewing
     const wsEndpoint = browserlessToken
-      ? `wss://${cleanBrowserlessUrl}?token=${browserlessToken}`
-      : `wss://${cleanBrowserlessUrl}`;
+      ? `wss://${cleanBrowserlessUrl}?token=${browserlessToken}&headless=false`
+      : `wss://${cleanBrowserlessUrl}?headless=false`;
 
-    console.log(`[start-recording] Session ID: ${sessionId}`);
-    console.log(`[start-recording] Live URL: ${liveUrl}`);
+    console.log(`[start-recording] WebSocket endpoint: ${wsEndpoint}`);
 
-    // Create a simple function to start capturing network/DOM state
-    // We'll use Browserless /function API to set up the browser and return info
-    const initScript = `
-module.exports = async ({ page, context }) => {
-  // Navigate to the ERP URL
-  await page.goto('${erpUrl}', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  
-  // Get initial page info
-  const pageInfo = {
-    url: page.url(),
-    title: await page.title(),
-  };
-  
-  // Take initial screenshot
-  const screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 70 });
-  
-  return {
-    data: {
-      success: true,
-      pageInfo,
-      initialScreenshot: screenshot,
-    },
-    type: 'application/json'
-  };
-};
-`;
-
-    // Start a browser session to get initial state
-    const browserlessApiUrl = browserlessToken
-      ? `https://${cleanBrowserlessUrl}/function?token=${browserlessToken}`
-      : `https://${cleanBrowserlessUrl}/function`;
-
-    console.log(`[start-recording] Initializing browser session...`);
-
-    const initResponse = await fetch(browserlessApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/javascript',
-      },
-      body: initScript,
+    // Connect to Browserless via Puppeteer
+    browser = await puppeteer.connect({
+      browserWSEndpoint: wsEndpoint,
     });
 
-    let initialData = null;
-    let initError = null;
+    console.log(`[start-recording] Connected to browser`);
 
-    if (initResponse.ok) {
-      const result = await initResponse.json();
-      initialData = result.data || result;
-      console.log(`[start-recording] Initial page loaded: ${initialData?.pageInfo?.title}`);
-    } else {
-      const errorText = await initResponse.text();
-      initError = errorText;
-      console.error(`[start-recording] Failed to initialize browser:`, errorText);
+    // Create a new page and navigate to ERP URL
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+
+    console.log(`[start-recording] Navigating to: ${erpUrl}`);
+    await page.goto(erpUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    // Get page info after navigation
+    const pageUrl = page.url();
+    const pageTitle = await page.title();
+    console.log(`[start-recording] Page loaded: ${pageTitle}`);
+
+    // Take initial screenshot
+    const screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 70 });
+    console.log(`[start-recording] Screenshot taken`);
+
+    // Query /sessions API to get devtoolsFrontendUrl
+    const sessionsUrl = browserlessToken
+      ? `https://${cleanBrowserlessUrl}/sessions?token=${browserlessToken}`
+      : `https://${cleanBrowserlessUrl}/sessions`;
+
+    console.log(`[start-recording] Fetching sessions from: ${sessionsUrl}`);
+
+    const sessionsResponse = await fetch(sessionsUrl);
+    
+    if (!sessionsResponse.ok) {
+      const errorText = await sessionsResponse.text();
+      console.error(`[start-recording] Sessions API error:`, errorText);
+      throw new Error(`Erro ao buscar sessões: ${sessionsResponse.status}`);
     }
+
+    const sessions: BrowserlessSession[] = await sessionsResponse.json();
+    console.log(`[start-recording] Found ${sessions.length} active sessions`);
+
+    // Find the session for our browser
+    // Match by URL containing the ERP hostname
+    const erpHostname = new URL(erpUrl).hostname;
+    let currentSession = sessions.find(s => s.url?.includes(erpHostname));
+    
+    // If not found by URL, take the most recent session
+    if (!currentSession && sessions.length > 0) {
+      currentSession = sessions[0];
+    }
+
+    if (!currentSession) {
+      throw new Error('Sessão do navegador não encontrada');
+    }
+
+    console.log(`[start-recording] Found session:`, currentSession.browserId);
+
+    // Build the DevTools URL for live viewing
+    // The devtoolsFrontendUrl is like: /devtools/inspector.html?wss=host/devtools/page/PAGE_ID
+    const devtoolsPath = currentSession.devtoolsFrontendUrl;
+    
+    // Construct the full URL
+    // Add token if needed
+    let liveUrl = `https://${cleanBrowserlessUrl}${devtoolsPath}`;
+    if (browserlessToken) {
+      // Add token to the URL if not already present
+      liveUrl = liveUrl.includes('?') 
+        ? `${liveUrl}&token=${browserlessToken}`
+        : `${liveUrl}?token=${browserlessToken}`;
+    }
+
+    console.log(`[start-recording] Live URL: ${liveUrl}`);
+
+    // IMPORTANT: Do NOT close the browser - the session needs to stay active!
+    // The browser will be closed when stop-recording is called
+    
+    // Store the browser wsEndpoint for later reconnection
+    const browserWsEndpoint = browser.wsEndpoint();
 
     return new Response(
       JSON.stringify({
         success: true,
-        sessionId,
+        sessionId: currentSession.browserId,
         liveUrl,
-        wsEndpoint,
+        wsEndpoint: browserWsEndpoint,
         erpUrl,
-        initialScreenshot: initialData?.initialScreenshot,
-        pageInfo: initialData?.pageInfo,
-        initError,
+        initialScreenshot: screenshot,
+        pageInfo: {
+          url: pageUrl,
+          title: pageTitle,
+        },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -152,6 +178,16 @@ module.exports = async ({ page, context }) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[start-recording] Unexpected error:', error);
+
+    // Close browser on error
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('[start-recording] Error closing browser:', closeError);
+      }
+    }
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
