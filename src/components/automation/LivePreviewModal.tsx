@@ -15,11 +15,14 @@ import {
   XCircle, 
   Loader2,
   ExternalLink,
-  X
+  X,
+  AlertCircle,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ExecutionSession } from "@/types/automation";
 import { subscribeToExecution, getExecutionStatus } from "@/services/executionService";
+import { Link } from "react-router-dom";
 
 interface LivePreviewModalProps {
   isOpen: boolean;
@@ -43,9 +46,16 @@ export function LivePreviewModal({
     totalSteps: 0,
   });
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [iframeError, setIframeError] = useState(false);
+  const [newWindowOpened, setNewWindowOpened] = useState(false);
 
   useEffect(() => {
     if (!executionId || !isOpen) return;
+
+    // Reset states when opening
+    setIframeLoaded(false);
+    setIframeError(false);
+    setNewWindowOpened(false);
 
     // Initial fetch
     getExecutionStatus(executionId).then((status) => {
@@ -63,6 +73,19 @@ export function LivePreviewModal({
       unsubscribe();
     };
   }, [executionId, isOpen]);
+
+  // Auto-check iframe loading after timeout
+  useEffect(() => {
+    if (!liveUrl || iframeLoaded || iframeError) return;
+    
+    const timeout = setTimeout(() => {
+      if (!iframeLoaded) {
+        setIframeError(true);
+      }
+    }, 5000); // 5 seconds timeout
+
+    return () => clearTimeout(timeout);
+  }, [liveUrl, iframeLoaded, iframeError]);
 
   const getStatusConfig = () => {
     switch (session.status) {
@@ -119,7 +142,12 @@ export function LivePreviewModal({
   const handleOpenNewWindow = () => {
     if (liveUrl) {
       window.open(liveUrl, '_blank', 'width=1280,height=720,menubar=no,toolbar=no');
+      setNewWindowOpened(true);
     }
+  };
+
+  const handleIframeLoad = () => {
+    setIframeLoaded(true);
   };
 
   return (
@@ -190,6 +218,49 @@ export function LivePreviewModal({
                 </p>
               </div>
             </div>
+          ) : iframeError || newWindowOpened ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center space-y-4 max-w-md px-4">
+                {newWindowOpened ? (
+                  <>
+                    <ExternalLink className="h-12 w-12 text-info mx-auto" />
+                    <div>
+                      <h3 className="font-medium text-lg">Visualização aberta em nova janela</h3>
+                      <p className="text-muted-foreground text-sm mt-1">
+                        A execução está sendo exibida em uma janela separada. 
+                        Você pode acompanhar o progresso aqui.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-12 w-12 text-warning mx-auto" />
+                    <div>
+                      <h3 className="font-medium text-lg">Visualização inline não disponível</h3>
+                      <p className="text-muted-foreground text-sm mt-1">
+                        O Browserless não permite exibição em iframe por questões de segurança.
+                        Clique abaixo para abrir em uma nova janela.
+                      </p>
+                    </div>
+                    <Button onClick={handleOpenNewWindow} className="gap-2">
+                      <ExternalLink className="h-4 w-4" />
+                      Abrir em Nova Janela
+                    </Button>
+                  </>
+                )}
+                
+                {/* Progress indicator inline */}
+                <div className="pt-4 border-t mt-4">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Status: {statusConfig.label}
+                  </p>
+                  <Progress value={progressPercent} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {session.currentStep} de {session.totalSteps} passos
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               {!iframeLoaded && (
@@ -205,15 +276,15 @@ export function LivePreviewModal({
               <iframe
                 src={liveUrl}
                 className="w-full h-full border-0"
-                onLoad={() => setIframeLoaded(true)}
-                sandbox="allow-same-origin allow-scripts"
+                onLoad={handleIframeLoad}
+                onError={() => setIframeError(true)}
                 title="Live Preview"
               />
             </>
           )}
           
           {/* Live indicator */}
-          {liveUrl && session.status === 'running' && (
+          {liveUrl && session.status === 'running' && !iframeError && !newWindowOpened && (
             <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-full text-sm font-medium">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
@@ -234,9 +305,17 @@ export function LivePreviewModal({
                   : `Execução concluída! ${session.currentStep} passos executados.`
                 }
               </p>
-              <Button onClick={onClose}>
-                Fechar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" asChild className="gap-1.5">
+                  <Link to="/logs">
+                    <History className="h-4 w-4" />
+                    Ver Logs
+                  </Link>
+                </Button>
+                <Button onClick={onClose}>
+                  Fechar
+                </Button>
+              </div>
             </div>
           </div>
         )}

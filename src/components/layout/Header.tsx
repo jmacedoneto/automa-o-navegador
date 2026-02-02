@@ -1,5 +1,6 @@
+import { forwardRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Bot, Settings, LayoutDashboard, Wifi, WifiOff } from "lucide-react";
+import { Bot, Settings, LayoutDashboard, Wifi, WifiOff, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { getBrowserlessSettings, testBrowserlessConnection } from "@/services/settingsService";
@@ -10,7 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export function Header() {
+export const Header = forwardRef<HTMLElement, object>(function Header(_props, ref) {
   const location = useLocation();
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -39,7 +40,7 @@ export function Header() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <header ref={ref} className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container flex h-16 items-center justify-between">
         {/* Logo e Nome */}
         <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-80">
@@ -66,6 +67,20 @@ export function Header() {
             <Link to="/">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+          </Button>
+          <Button
+            variant={isActive("/logs") ? "secondary" : "ghost"}
+            size="sm"
+            asChild
+            className={cn(
+              "gap-2",
+              isActive("/logs") && "bg-primary/10 text-primary"
+            )}
+          >
+            <Link to="/logs">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Logs</span>
             </Link>
           </Button>
           <Button
@@ -124,4 +139,4 @@ export function Header() {
       </div>
     </header>
   );
-}
+});

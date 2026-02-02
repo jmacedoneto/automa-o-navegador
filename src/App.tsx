@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import AutomationEditor from "./pages/AutomationEditor";
 import Settings from "./pages/Settings";
+import ExecutionLogs from "./pages/ExecutionLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/logs" element={<ExecutionLogs />} />
           <Route path="/automation/new" element={<AutomationEditor />} />
           <Route path="/automation/:id" element={<AutomationEditor />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
