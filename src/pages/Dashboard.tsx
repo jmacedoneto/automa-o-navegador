@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { Automation } from "@/types/automation";
+import { useNavigate } from "react-router-dom";
+import { Automation, AutomationStep } from "@/types/automation";
 import { AutomationList } from "@/components/automation/AutomationList";
 import { LivePreviewModal } from "@/components/automation/LivePreviewModal";
+import { RecordingModal } from "@/components/automation/RecordingModal";
 import { 
   fetchAutomations, 
   deleteAutomation, 
@@ -10,6 +12,8 @@ import {
 import { executeAutomation } from "@/services/executionService";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
+import { Button } from "@/components/ui/button";
+import { Plus, Video } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,9 +33,11 @@ interface LivePreviewState {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [livePreview, setLivePreview] = useState<LivePreviewState>({
     isOpen: false,
     liveUrl: null,
@@ -141,17 +147,48 @@ export default function Dashboard() {
     loadAutomations();
   };
 
+  const handleStepsGenerated = (steps: AutomationStep[], erpUrl: string, notes?: string) => {
+    // Navigate to the automation editor with pre-populated steps
+    navigate('/automation/new', {
+      state: {
+        prePopulatedSteps: steps,
+        prePopulatedErpUrl: erpUrl,
+        prePopulatedNotes: notes,
+        fromRecording: true,
+      },
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       {/* Main content */}
       <main className="container py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie suas automações de extração de dados
-          </p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground mt-1">
+              Gerencie suas automações de extração de dados
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsRecordingModalOpen(true)}
+              className="gap-2"
+            >
+              <Video className="h-4 w-4" />
+              Gravar Automação
+            </Button>
+            <Button
+              onClick={() => navigate('/automation/new')}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Automação
+            </Button>
+          </div>
         </div>
 
         <AutomationList
@@ -192,6 +229,13 @@ export default function Dashboard() {
         liveUrl={livePreview.liveUrl}
         automationName={livePreview.automationName}
         executionId={livePreview.executionId}
+      />
+
+      {/* Recording Modal */}
+      <RecordingModal
+        isOpen={isRecordingModalOpen}
+        onClose={() => setIsRecordingModalOpen(false)}
+        onStepsGenerated={handleStepsGenerated}
       />
     </div>
   );

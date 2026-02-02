@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.execute-automation]
 verify_jwt = false
+
+[functions.start-recording-session]
+verify_jwt = false
+
+[functions.stop-recording-session]
+verify_jwt = false

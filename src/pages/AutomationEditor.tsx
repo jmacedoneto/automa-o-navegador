@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +31,19 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 
+// Interface for pre-populated data from recording
+interface LocationState {
+  prePopulatedSteps?: AutomationStep[];
+  prePopulatedErpUrl?: string;
+  prePopulatedNotes?: string;
+  fromRecording?: boolean;
+}
+
 export default function AutomationEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as LocationState | null;
   const isNew = !id || id === 'new';
 
   const [isLoading, setIsLoading] = useState(!isNew);
@@ -55,6 +65,24 @@ export default function AutomationEditor() {
   
   // Media uploads
   const [uploadedFiles, setUploadedFiles] = useState<UploadedMedia[]>([]);
+
+  // Handle pre-populated data from recording
+  useEffect(() => {
+    if (isNew && locationState?.fromRecording) {
+      if (locationState.prePopulatedSteps) {
+        setSteps(locationState.prePopulatedSteps);
+      }
+      if (locationState.prePopulatedErpUrl) {
+        setErpUrl(locationState.prePopulatedErpUrl);
+      }
+      if (locationState.prePopulatedNotes) {
+        setNotes(locationState.prePopulatedNotes);
+        setInstructions(`Automação gravada: ${locationState.prePopulatedNotes}`);
+      }
+      // Clear location state to prevent re-applying on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [isNew, locationState]);
 
   useEffect(() => {
     if (!isNew && id) {
