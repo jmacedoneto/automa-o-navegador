@@ -1,84 +1,136 @@
 
-# Plano: Live Preview - Visualização em Tempo Real
+# Plano: Modo de Gravacao - Aprendizado por Observacao
 
 ## Resumo
 
-Adicionar botão de "Live Preview" que, ao ser clicado durante uma execução ou ao iniciar uma, abre uma janela/modal exibindo a tela do Browserless em tempo real - mostrando o mouse se movendo, cliques acontecendo, etc.
+Criar um modo "Gravar Automacao" onde o usuario assume o controle do navegador remotamente, faz as acoes manualmente (cliques, digitacao, navegacao), e a IA observa todas as interacoes para gerar automaticamente os passos de automacao.
 
 ---
 
 ## Como Funciona
 
-O Browserless oferece uma API chamada `Browserless.liveURL` que gera um link temporário para visualizar a sessão do navegador em tempo real. Este link pode ser embutido em um iframe ou aberto em nova janela.
-
 ```text
 +------------------------------------------+
-|  [Executar]  [Executar com Live Preview] |
+|  [Criar Nova Automacao]                  |
+|  [Gravar Nova Automacao]  <-- NOVO       |
 +------------------------------------------+
          |
          v
 +------------------------------------------+
-|  Modal: Live Preview                     |
+|  Modal: Gravar Automacao                 |
++------------------------------------------+
+|  URL inicial do ERP: [_____________]     |
+|  [Iniciar Gravacao]                      |
++------------------------------------------+
+         |
+         v
++------------------------------------------+
+|  Modal: Gravacao em Andamento            |
 +------------------------------------------+
 |  +------------------------------------+  |
 |  |                                    |  |
-|  |   [iframe com a tela do browser]   |  |
-|  |   Mouse se movendo em tempo real   |  |
+|  |  [iframe/janela com liveURL]       |  |
+|  |  Usuario interage diretamente      |  |
 |  |                                    |  |
 |  +------------------------------------+  |
 |                                          |
-|  Status: Executando passo 3 de 8         |
-|  [X] Fechar Preview                      |
+|  Status: Gravando...                     |
+|  Acoes capturadas: 12                    |
+|                                          |
+|  [Finalizar Gravacao]                    |
++------------------------------------------+
+         |
+         v
++------------------------------------------+
+|  Modal: Gerando Passos                   |
++------------------------------------------+
+|  A IA esta analisando suas acoes...      |
+|  [Barra de progresso]                    |
++------------------------------------------+
+         |
+         v
++------------------------------------------+
+|  Editor de Automacao                     |
++------------------------------------------+
+|  Passos gerados automaticamente!         |
+|  1. Navegar para URL                     |
+|  2. Clicar em #login-button              |
+|  3. Digitar em #username                 |
+|  ...                                     |
 +------------------------------------------+
 ```
 
 ---
 
-## Arquitetura
+## Arquitetura Tecnica
 
-### Fluxo de Execução com Live Preview
+### Fluxo de Gravacao
 
-1. Usuario clica em "Executar com Live Preview"
-2. Frontend chama Edge Function `execute-automation`
-3. Edge Function conecta ao Browserless via WebSocket
-4. Edge Function solicita `Browserless.liveURL` e retorna a URL para o frontend
-5. Frontend abre modal/janela com iframe apontando para a liveURL
-6. Enquanto executa, Edge Function envia updates de progresso via resposta streaming ou polling
-7. Ao finalizar, Edge Function fecha sessao e frontend fecha o preview
+1. Usuario clica em "Gravar Nova Automacao"
+2. Frontend chama Edge Function `start-recording-session`
+3. Edge Function conecta ao Browserless via Puppeteer:
+   - Ativa `replay=true` para capturar eventos DOM/RRWeb
+   - Gera `liveURL` para o usuario interagir
+   - Configura listeners CDP para capturar eventos de input
+4. Usuario interage com a pagina via liveURL
+5. Backend captura todas as interacoes:
+   - Cliques (Input.dispatchMouseEvent)
+   - Digitacao (Input.dispatchKeyEvent)
+   - Navegacao (Page.navigate)
+   - Scrolls, hovers, etc.
+6. Usuario clica "Finalizar"
+7. Frontend chama Edge Function `stop-recording-session`
+8. Edge Function:
+   - Para a gravacao
+   - Coleta todos os eventos capturados
+   - Envia para IA analisar
+   - IA gera passos estruturados
+9. Frontend recebe os passos e abre o Editor
 
 ---
 
 ## Arquivos a Criar
 
-### 1. supabase/functions/execute-automation/index.ts
+### 1. supabase/functions/start-recording-session/index.ts
 
-Nova Edge Function que:
-- Recebe ID da automacao e flag `withLivePreview`
-- Busca dados da automacao e configuracoes globais do Browserless
-- Conecta ao Browserless via puppeteer-core
-- Se `withLivePreview=true`, gera liveURL e retorna imediatamente
-- Executa os passos sequencialmente
-- Salva log de execucao no banco
-- Envia dados para webhook se configurado
+Edge Function que:
+- Recebe a URL inicial do ERP
+- Conecta ao Browserless com `replay=true` e `headless=false`
+- Cria sessao CDP e configura listeners de eventos
+- Gera liveURL interativo
+- Cria registro de sessao de gravacao no banco
+- Retorna:
+  - `sessionId`: ID da sessao de gravacao
+  - `liveUrl`: URL para o usuario interagir
+  - `wsEndpoint`: Para reconexao (se necessario)
 
-Tecnologias:
-- puppeteer-core (conectar via WebSocket ao Browserless)
-- CDP Session para chamar `Browserless.liveURL`
+### 2. supabase/functions/stop-recording-session/index.ts
 
-### 2. src/components/automation/LivePreviewModal.tsx
+Edge Function que:
+- Recebe o `sessionId`
+- Para a gravacao via CDP
+- Coleta todos os eventos capturados (cliques, digitacao, navegacao)
+- Envia eventos + screenshots para IA (Gemini Vision)
+- IA analisa e gera passos estruturados
+- Fecha o navegador
+- Retorna os passos gerados
 
-Modal que:
-- Recebe a liveURL e a exibe em um iframe
-- Mostra status de execucao (passo atual)
-- Botao para fechar o preview
-- Indicador visual de que esta ao vivo
+### 3. src/components/automation/RecordingModal.tsx
 
-### 3. src/services/executionService.ts
+Modal de gravacao que:
+- Campo para URL inicial do ERP
+- Botao "Iniciar Gravacao"
+- Exibe iframe/link para liveURL
+- Contador de acoes capturadas
+- Botao "Finalizar Gravacao"
+- Indicador de processamento da IA
 
-Novo service para:
-- Chamar a Edge Function de execucao
-- Gerenciar estado da execucao (polling ou streaming)
-- Retornar liveURL para o componente
+### 4. src/services/recordingService.ts
+
+Service para:
+- Iniciar sessao de gravacao
+- Parar sessao e obter passos
+- Gerenciar estado da gravacao
 
 ---
 
@@ -86,107 +138,240 @@ Novo service para:
 
 ### 1. src/pages/Dashboard.tsx
 
-- Atualizar `handleExecute` para suportar modo com live preview
-- Adicionar estado para controlar o modal de live preview
-- Passar liveURL para o modal
+- Adicionar botao "Gravar Nova Automacao"
+- Estado para controlar o modal de gravacao
+- Handler para receber passos gerados e criar automacao
 
-### 2. src/components/automation/AutomationCard.tsx
+### 2. src/pages/AutomationEditor.tsx
 
-- Adicionar botao "Live Preview" ao lado de "Executar"
-- Ou transformar "Executar" em dropdown com opcoes:
-  - Executar (background)
-  - Executar com Live Preview
-
-### 3. src/types/automation.ts
-
-- Adicionar interface `ExecutionSession` com campos:
-  - `liveUrl?: string`
-  - `executionId: string`
-  - `status: 'starting' | 'running' | 'completed' | 'failed'`
-  - `currentStep: number`
-  - `totalSteps: number`
+- Receber passos pre-populados via state do router
+- Permitir que o usuario edite os passos gerados
 
 ---
 
 ## Detalhes Tecnicos
 
-### Edge Function: execute-automation
+### Edge Function: start-recording-session
 
 ```typescript
 // Estrutura basica
-import puppeteer from 'puppeteer-core';
-
-// 1. Conectar ao Browserless
 const browser = await puppeteer.connect({
-  browserWSEndpoint: `wss://${browserlessUrl}?token=${token}`
+  browserWSEndpoint: `wss://${url}?token=${token}&replay=true&headless=false`
 });
 
 const page = await browser.newPage();
 const cdp = await page.createCDPSession();
 
-// 2. Gerar LiveURL (se solicitado)
-if (withLivePreview) {
-  const { liveURL } = await cdp.send('Browserless.liveURL', {
-    timeout: 300000, // 5 minutos
-    quality: 70,
-  });
-  // Retornar liveURL para o frontend
-}
+// Navegar para URL inicial
+await page.goto(erpUrl, { waitUntil: 'networkidle2' });
 
-// 3. Executar passos
-for (const step of steps) {
-  // navigate, click, type, wait, screenshot, extractTable
-}
+// Gerar liveURL interativo
+const { liveURL } = await cdp.send('Browserless.liveURL', {
+  timeout: 600000, // 10 minutos
+  interactable: true,
+  quality: 70,
+});
 
-// 4. Salvar resultados
-await browser.close();
+// Configurar captura de eventos via Page
+// Os eventos serao coletados pelo RRWeb automaticamente
+// Quando o usuario fechar, teremos o replay completo
 ```
 
-### LivePreviewModal Component
+### Edge Function: stop-recording-session
 
 ```typescript
-interface LivePreviewModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  liveUrl: string;
-  automationName: string;
-  currentStep: number;
-  totalSteps: number;
-  status: 'starting' | 'running' | 'completed' | 'failed';
-}
+// Parar gravacao e coletar dados
+const recording = await cdp.send('Browserless.stopSessionRecording');
+
+// Capturar screenshot final
+const screenshot = await page.screenshot({ encoding: 'base64' });
+
+// Coletar dados da pagina atual
+const pageContent = await page.content();
+const pageUrl = page.url();
+
+// Enviar para IA analisar
+const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  body: JSON.stringify({
+    model: 'google/gemini-3-flash-preview',
+    messages: [{
+      role: 'system',
+      content: `Voce e um especialista em automacao web.
+        Analise a gravacao de sessao e o HTML da pagina.
+        Gere passos de automacao estruturados.`
+    }, {
+      role: 'user',
+      content: [{
+        type: 'text',
+        text: `Eventos gravados: ${JSON.stringify(events)}
+               URL final: ${pageUrl}
+               Gere os passos de automacao.`
+      }, {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${screenshot}` }
+      }]
+    }],
+    tools: [{
+      type: 'function',
+      function: {
+        name: 'generate_automation_steps',
+        parameters: {
+          type: 'object',
+          properties: {
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  order: { type: 'number' },
+                  action: { type: 'string', enum: ['navigate', 'click', 'type', 'wait', 'waitForSelector', 'screenshot', 'extractTable'] },
+                  selector: { type: 'string' },
+                  value: { type: 'string' },
+                  description: { type: 'string' }
+                }
+              }
+            }
+          }
+        }
+      }
+    }],
+    tool_choice: { type: 'function', function: { name: 'generate_automation_steps' } }
+  })
+});
 ```
 
-### Fluxo de Estados
+### RecordingModal Component
 
-```text
-[Clique no botao]
-       |
-       v
-[Modal abre com "Iniciando..."]
-       |
-       v
-[Edge Function retorna liveURL]
-       |
-       v
-[iframe carrega a sessao ao vivo]
-       |
-       v
-[Polling verifica progresso a cada 2s]
-       |
-       v
-[Execucao completa]
-       |
-       v
-[Modal mostra "Concluido!" com botao fechar]
+```typescript
+interface RecordingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onStepsGenerated: (steps: AutomationStep[], erpUrl: string) => void;
+}
+
+// Estados:
+// 'idle' -> Aguardando URL inicial
+// 'starting' -> Iniciando sessao
+// 'recording' -> Gravando (mostra liveURL)
+// 'processing' -> IA analisando
+// 'complete' -> Passos gerados
 ```
 
 ---
 
-## Consideracoes de Seguranca
+## Fluxo de Estados
 
-- A liveURL e temporaria e expira apos o timeout
-- Nao requer autenticacao adicional (ja esta na sessao)
-- O iframe tem sandbox para seguranca
+```text
+[Dashboard]
+    |
+    | Clica "Gravar Nova Automacao"
+    v
+[RecordingModal: idle]
+    |
+    | Insere URL e clica "Iniciar"
+    v
+[RecordingModal: starting]
+    |
+    | Edge Function retorna liveURL
+    v
+[RecordingModal: recording]
+    |
+    | Usuario interage, clica "Finalizar"
+    v
+[RecordingModal: processing]
+    |
+    | IA gera passos
+    v
+[RecordingModal: complete]
+    |
+    | onStepsGenerated(steps)
+    v
+[AutomationEditor com passos pre-populados]
+```
+
+---
+
+## Consideracoes Importantes
+
+### Captura de Eventos
+
+O Browserless com `replay=true` grava automaticamente:
+- Movimentos do mouse
+- Cliques
+- Digitacao
+- Scrolls
+- Navegacoes
+- Mutacoes DOM
+
+Esses dados sao armazenados no dashboard do Browserless e podem ser acessados via API para analise.
+
+### Alternativa: Captura via CDP
+
+Se a captura via replay nao for suficiente, podemos usar o Chrome DevTools Protocol diretamente:
+
+```javascript
+// Escutar eventos de input
+cdp.on('Input.dispatchMouseEvent', (event) => {
+  capturedEvents.push({ type: 'mouse', ...event });
+});
+
+cdp.on('Input.dispatchKeyEvent', (event) => {
+  capturedEvents.push({ type: 'key', ...event });
+});
+```
+
+### Geracao de Seletores
+
+A IA analisara:
+1. O HTML da pagina
+2. Os eventos capturados
+3. Os screenshots
+
+Para gerar seletores robustos:
+- Priorizar IDs quando disponiveis
+- Usar data-attributes
+- Fallback para classes CSS
+- XPath como ultimo recurso
+
+---
+
+## Analise da Stack Atual
+
+Sua configuracao do Browserless esta **quase completa**. O que voce tem:
+
+| Funcionalidade | Status |
+|----------------|--------|
+| TOKEN de autenticacao | OK |
+| MAX_CONCURRENT_SESSIONS | OK |
+| PREBOOT_CHROME | OK |
+| KEEP_ALIVE | OK |
+| SSL via Traefik | OK |
+
+### O que falta para gravacao
+
+Voce precisa adicionar estas variaveis de ambiente:
+
+```yaml
+environment:
+  # ... configuracoes existentes ...
+  
+  # Habilitar modo headful para gravacao interativa
+  - HEADLESS=false
+  
+  # Permitir sessoes mais longas para gravacao
+  - DEFAULT_BLOCK_ADS=true
+  - DEFAULT_STEALTH=true
+  
+  # Importante: permitir replay
+  - ENABLE_API_GET=true
+```
+
+### Observacao sobre Session Replay
+
+O **Session Replay** (com replay=true) requer um plano pago do Browserless Cloud. Como voce esta usando self-hosted, a captura de eventos sera feita via:
+1. CDP listeners para eventos de input
+2. Puppeteer page events
+3. Screenshots periodicos
 
 ---
 
@@ -194,20 +379,19 @@ interface LivePreviewModalProps {
 
 | Passo | Arquivo | Descricao |
 |-------|---------|-----------|
-| 1 | `execute-automation/index.ts` | Edge Function de execucao com suporte a liveURL |
-| 2 | `executionService.ts` | Service para chamar a Edge Function |
-| 3 | `LivePreviewModal.tsx` | Modal com iframe para exibir a sessao |
-| 4 | `AutomationCard.tsx` | Adicionar botao "Live Preview" |
-| 5 | `Dashboard.tsx` | Integrar modal e gerenciar estado |
-| 6 | `automation.ts` | Tipos para sessao de execucao |
+| 1 | `start-recording-session/index.ts` | Edge Function para iniciar gravacao |
+| 2 | `stop-recording-session/index.ts` | Edge Function para parar e gerar passos |
+| 3 | `recordingService.ts` | Service frontend |
+| 4 | `RecordingModal.tsx` | Modal de gravacao |
+| 5 | `Dashboard.tsx` | Adicionar botao e integracao |
+| 6 | `AutomationEditor.tsx` | Receber passos pre-populados |
 
 ---
 
 ## Resultado Esperado
 
-- Usuario pode clicar em "Live Preview" em qualquer automacao
-- Um modal abre mostrando a tela do navegador em tempo real
-- O usuario ve o mouse se movendo, campos sendo preenchidos, botoes sendo clicados
-- Ao final, o modal mostra o resultado (sucesso/erro)
-- O usuario pode fechar o preview a qualquer momento
-
+- Botao "Gravar Nova Automacao" no Dashboard
+- Usuario abre o browser remoto e faz as acoes manualmente
+- Ao finalizar, a IA analisa e gera os passos automaticamente
+- Usuario revisa e edita os passos no Editor
+- Automacao pronta para uso!
