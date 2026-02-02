@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StepsList } from "@/components/StepsList";
+import { MediaUploader } from "@/components/automation/MediaUploader";
 import { AutomationStep, Automation } from "@/types/automation";
+import type { UploadedMedia } from "@/services/mediaService";
 import { 
   fetchAutomationById, 
   createAutomation, 
@@ -23,7 +26,6 @@ import {
   ArrowLeft,
   Settings,
   Webhook,
-  Key,
   Globe,
   FileSpreadsheet
 } from "lucide-react";
@@ -49,6 +51,10 @@ export default function AutomationEditor() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [requiresLogin, setRequiresLogin] = useState(false);
+  
+  // Media uploads
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedMedia[]>([]);
 
   useEffect(() => {
     if (!isNew && id) {
@@ -74,6 +80,7 @@ export default function AutomationEditor() {
       setWebhookUrl(data.webhook_url || "");
       setUsername(data.credentials?.username || "");
       setPassword(data.credentials?.password || "");
+      setRequiresLogin(!!(data.credentials?.username || data.credentials?.password));
     } catch (error) {
       console.error("Error loading automation:", error);
       toast.error("Erro ao carregar automação");
@@ -84,14 +91,21 @@ export default function AutomationEditor() {
   };
 
   const handleGenerateSteps = async () => {
-    if (!instructions.trim()) {
-      toast.error("Por favor, descreva o que você quer automatizar");
+    if (!instructions.trim() && uploadedFiles.length === 0) {
+      toast.error("Por favor, descreva o que você quer automatizar ou envie arquivos de mídia");
       return;
     }
 
     setIsGenerating(true);
     try {
-      const result = await generateSteps(instructions, erpUrl);
+      // Collect media URLs for the AI
+      const mediaUrls = uploadedFiles.map(f => ({
+        type: f.file_type,
+        url: f.file_url,
+        name: f.file_name
+      }));
+
+      const result = await generateSteps(instructions, erpUrl, mediaUrls);
       setSteps(result.steps);
       setNotes(result.notes);
       toast.success("Passos gerados com sucesso!");
@@ -120,13 +134,15 @@ export default function AutomationEditor() {
         name,
         description: description || null,
         erp_url: erpUrl,
-        browserless_url: "", // Agora vem das configurações globais
+        browserless_url: "", // Vem das configurações globais
         sheets_url: sheetsUrl,
         instructions,
         steps,
         is_active: true,
         webhook_url: webhookUrl || undefined,
-        credentials: (username || password) ? { username, password } : undefined,
+        credentials: requiresLogin && (username || password) 
+          ? { username, password } 
+          : undefined,
       };
 
       if (isNew) {
@@ -202,7 +218,7 @@ export default function AutomationEditor() {
       {/* Main content */}
       <main className="container py-6">
         <Tabs defaultValue="config" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-muted/50">
+          <TabsList className="grid w-full grid-cols-3 max-w-xl bg-muted/50">
             <TabsTrigger value="config" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Configuração</span>
@@ -210,10 +226,6 @@ export default function AutomationEditor() {
             <TabsTrigger value="steps" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Bot className="h-4 w-4" />
               <span className="hidden sm:inline">Passos</span>
-            </TabsTrigger>
-            <TabsTrigger value="credentials" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Key className="h-4 w-4" />
-              <span className="hidden sm:inline">Credenciais</span>
             </TabsTrigger>
             <TabsTrigger value="webhook" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Webhook className="h-4 w-4" />
@@ -223,6 +235,7 @@ export default function AutomationEditor() {
 
           {/* Config Tab */}
           <TabsContent value="config" className="space-y-6">
+            {/* Basic Info */}
             <Card className="border-l-4 border-l-primary">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -230,7 +243,7 @@ export default function AutomationEditor() {
                   Informações Básicas
                 </CardTitle>
                 <CardDescription>
-                  Defina o nome e as URLs necessárias para a automação
+                  Defina o nome e descrição da automação
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -254,32 +267,94 @@ export default function AutomationEditor() {
                     />
                   </div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="erpUrl" className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      URL do ERP
-                    </Label>
-                    <Input
-                      id="erpUrl"
-                      placeholder="https://seu-erp.com.br"
-                      value={erpUrl}
-                      onChange={(e) => setErpUrl(e.target.value)}
-                    />
+            {/* ERP Config */}
+            <Card className="border-l-4 border-l-accent">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-accent" />
+                  Configuração do ERP
+                </CardTitle>
+                <CardDescription>
+                  URL do sistema e credenciais de acesso
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="erpUrl">URL do ERP *</Label>
+                  <Input
+                    id="erpUrl"
+                    placeholder="https://seu-erp.com.br"
+                    value={erpUrl}
+                    onChange={(e) => setErpUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox 
+                    id="requiresLogin" 
+                    checked={requiresLogin}
+                    onCheckedChange={(checked) => setRequiresLogin(checked === true)}
+                  />
+                  <Label 
+                    htmlFor="requiresLogin" 
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Este ERP requer login
+                  </Label>
+                </div>
+
+                {requiresLogin && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 pl-6 border-l-2 border-muted">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Usuário</Label>
+                      <Input
+                        id="username"
+                        placeholder="seu.usuario"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Senha</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                    </div>
+                    <p className="col-span-full text-xs text-muted-foreground">
+                      Use {"{{username}}"} e {"{{password}}"} nos passos de digitação para login automático.
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sheetsUrl" className="flex items-center gap-2">
-                      <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                      URL do Google Sheets
-                    </Label>
-                    <Input
-                      id="sheetsUrl"
-                      placeholder="https://docs.google.com/spreadsheets/d/..."
-                      value={sheetsUrl}
-                      onChange={(e) => setSheetsUrl(e.target.value)}
-                    />
-                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Google Sheets (Optional) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                  Integração (opcional)
+                </CardTitle>
+                <CardDescription>
+                  Configure uma planilha para receber os dados extraídos
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label htmlFor="sheetsUrl">URL do Google Sheets (opcional)</Label>
+                  <Input
+                    id="sheetsUrl"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    value={sheetsUrl}
+                    onChange={(e) => setSheetsUrl(e.target.value)}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -294,20 +369,40 @@ export default function AutomationEditor() {
                   Descreva a Automação
                 </CardTitle>
                 <CardDescription>
-                  Explique em português o que você quer fazer no ERP
+                  Explique em texto ou envie áudio/imagens/vídeos para a IA interpretar
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Exemplo: Logar no sistema com meu usuário e senha, ir no menu Relatórios, clicar em Vendas Mensal, selecionar o mês atual, e exportar a planilha Excel com os dados."
-                  value={instructions}
-                  onChange={(e) => setInstructions(e.target.value)}
-                  className="min-h-[120px]"
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Descrição em texto</Label>
+                  <Textarea
+                    placeholder="Exemplo: Logar no sistema com meu usuário e senha, ir no menu Relatórios, clicar em Vendas Mensal, selecionar o mês atual, e exportar a planilha Excel com os dados."
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    className="min-h-[120px]"
+                  />
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      ou envie mídias
+                    </span>
+                  </div>
+                </div>
+
+                <MediaUploader 
+                  uploadedFiles={uploadedFiles}
+                  onFilesChange={setUploadedFiles}
+                  automationId={isNew ? undefined : id}
                 />
                 
                 <Button 
                   onClick={handleGenerateSteps} 
-                  disabled={isGenerating || !instructions.trim()}
+                  disabled={isGenerating || (!instructions.trim() && uploadedFiles.length === 0)}
                   className="w-full gap-2 gradient-primary text-primary-foreground"
                 >
                   {isGenerating ? (
@@ -344,48 +439,6 @@ export default function AutomationEditor() {
               </CardHeader>
               <CardContent>
                 <StepsList steps={steps} onStepsChange={setSteps} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Credentials Tab */}
-          <TabsContent value="credentials" className="space-y-6">
-            <Card className="border-l-4 border-l-warning">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Key className="h-5 w-5 text-warning" />
-                  Credenciais do ERP
-                </CardTitle>
-                <CardDescription>
-                  Configure usuário e senha para login automático. 
-                  Use {"{{username}}"} e {"{{password}}"} nos passos de digitação.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Usuário</Label>
-                    <Input
-                      id="username"
-                      placeholder="seu.usuario"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  As credenciais são armazenadas de forma segura e usadas apenas durante a execução.
-                </p>
               </CardContent>
             </Card>
           </TabsContent>

@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+interface MediaFile {
+  type: 'audio' | 'image' | 'video';
+  url: string;
+  name: string;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -12,11 +18,15 @@ serve(async (req) => {
   }
 
   try {
-    const { instructions, erpUrl } = await req.json();
+    const { instructions, erpUrl, mediaFiles } = await req.json() as {
+      instructions?: string;
+      erpUrl?: string;
+      mediaFiles?: MediaFile[];
+    };
 
-    if (!instructions) {
+    if (!instructions && (!mediaFiles || mediaFiles.length === 0)) {
       return new Response(
-        JSON.stringify({ error: 'Instructions are required' }),
+        JSON.stringify({ error: 'Instructions or media files are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -26,9 +36,12 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Generating steps for instructions:", instructions);
+    console.log("Generating steps with:", {
+      instructionsLength: instructions?.length || 0,
+      mediaFilesCount: mediaFiles?.length || 0,
+    });
 
-    const systemPrompt = `Você é um especialista em automação web. O usuário vai descrever o que ele quer fazer em um sistema ERP e você deve converter isso em uma lista estruturada de passos para automação com Puppeteer/Browserless.
+    const systemPrompt = `Você é um especialista em automação web. O usuário vai descrever o que ele quer fazer em um sistema ERP através de texto, áudio (transcrito), imagens ou vídeos (descritos), e você deve converter isso em uma lista estruturada de passos para automação com Puppeteer/Browserless.
 
 Cada passo deve ter:
 - order: número sequencial do passo
@@ -52,6 +65,9 @@ IMPORTANTE:
 - Sempre inclua esperas adequadas entre ações
 - Para login, use placeholders como {{username}} e {{password}}
 - Seja específico nas descrições para que o usuário possa ajustar depois
+- Se receber imagens do ERP, analise visualmente e identifique os elementos da interface
+- Se receber áudio, considere a transcrição como instruções do usuário
+- Se receber vídeo, analise os frames para entender o fluxo
 
 Retorne APENAS um JSON válido com a estrutura:
 {
@@ -61,6 +77,43 @@ Retorne APENAS um JSON válido com a estrutura:
   "notes": "Observações importantes sobre a automação"
 }`;
 
+    // Build the user message with multimodal content
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+
+    // Add text instructions
+    let textContent = `URL do ERP: ${erpUrl || 'não informada'}\n\n`;
+    
+    if (instructions) {
+      textContent += `Instruções do usuário:\n${instructions}\n\n`;
+    }
+
+    if (mediaFiles && mediaFiles.length > 0) {
+      textContent += `Arquivos de mídia enviados:\n`;
+      
+      for (const media of mediaFiles) {
+        if (media.type === 'image') {
+          textContent += `- Imagem: ${media.name} (analise visualmente)\n`;
+          // Add image to the message for vision models
+          userContent.push({
+            type: "image_url",
+            image_url: { url: media.url }
+          });
+        } else if (media.type === 'audio') {
+          textContent += `- Áudio: ${media.name} (o usuário descreveu verbalmente o que quer automatizar)\n`;
+        } else if (media.type === 'video') {
+          textContent += `- Vídeo: ${media.name} (gravação de tela mostrando o fluxo desejado)\n`;
+        }
+      }
+    }
+
+    userContent.unshift({ type: "text", text: textContent });
+
+    // Choose model based on whether we have images
+    const hasImages = mediaFiles?.some(m => m.type === 'image');
+    const model = hasImages ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
+
+    console.log("Using model:", model);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -68,13 +121,10 @@ Retorne APENAS um JSON válido com a estrutura:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
-          { 
-            role: "user", 
-            content: `URL do ERP: ${erpUrl || 'não informada'}\n\nInstruções do usuário:\n${instructions}` 
-          },
+          { role: "user", content: userContent },
         ],
       }),
     });
