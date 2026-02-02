@@ -18,43 +18,227 @@ export type Database = {
         Row: {
           browserless_url: string
           created_at: string
+          credentials: Json | null
           description: string | null
           erp_url: string
           id: string
           instructions: string
           is_active: boolean | null
+          last_execution_at: string | null
+          last_execution_status:
+            | Database["public"]["Enums"]["execution_status"]
+            | null
           name: string
           sheets_url: string
           steps: Json | null
           updated_at: string
+          webhook_secret: string | null
+          webhook_url: string | null
         }
         Insert: {
           browserless_url: string
           created_at?: string
+          credentials?: Json | null
           description?: string | null
           erp_url: string
           id?: string
           instructions: string
           is_active?: boolean | null
+          last_execution_at?: string | null
+          last_execution_status?:
+            | Database["public"]["Enums"]["execution_status"]
+            | null
           name: string
           sheets_url: string
           steps?: Json | null
           updated_at?: string
+          webhook_secret?: string | null
+          webhook_url?: string | null
         }
         Update: {
           browserless_url?: string
           created_at?: string
+          credentials?: Json | null
           description?: string | null
           erp_url?: string
           id?: string
           instructions?: string
           is_active?: boolean | null
+          last_execution_at?: string | null
+          last_execution_status?:
+            | Database["public"]["Enums"]["execution_status"]
+            | null
           name?: string
           sheets_url?: string
           steps?: Json | null
           updated_at?: string
+          webhook_secret?: string | null
+          webhook_url?: string | null
         }
         Relationships: []
+      }
+      execution_logs: {
+        Row: {
+          automation_id: string
+          created_at: string
+          error_message: string | null
+          extracted_data: Json | null
+          finished_at: string | null
+          id: string
+          schedule_id: string | null
+          screenshots: Json | null
+          started_at: string
+          status: Database["public"]["Enums"]["execution_status"]
+          steps_completed: number | null
+          total_steps: number | null
+          webhook_response: Json | null
+        }
+        Insert: {
+          automation_id: string
+          created_at?: string
+          error_message?: string | null
+          extracted_data?: Json | null
+          finished_at?: string | null
+          id?: string
+          schedule_id?: string | null
+          screenshots?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["execution_status"]
+          steps_completed?: number | null
+          total_steps?: number | null
+          webhook_response?: Json | null
+        }
+        Update: {
+          automation_id?: string
+          created_at?: string
+          error_message?: string | null
+          extracted_data?: Json | null
+          finished_at?: string | null
+          id?: string
+          schedule_id?: string | null
+          screenshots?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["execution_status"]
+          steps_completed?: number | null
+          total_steps?: number | null
+          webhook_response?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_logs_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "execution_logs_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_uploads: {
+        Row: {
+          analysis: Json | null
+          automation_id: string | null
+          created_at: string
+          file_name: string | null
+          file_size: number | null
+          file_type: Database["public"]["Enums"]["media_type"]
+          file_url: string
+          id: string
+          transcription: string | null
+        }
+        Insert: {
+          analysis?: Json | null
+          automation_id?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_type: Database["public"]["Enums"]["media_type"]
+          file_url: string
+          id?: string
+          transcription?: string | null
+        }
+        Update: {
+          analysis?: Json | null
+          automation_id?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: Database["public"]["Enums"]["media_type"]
+          file_url?: string
+          id?: string
+          transcription?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_uploads_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedules: {
+        Row: {
+          automation_id: string
+          created_at: string
+          cron_expression: string | null
+          days_of_week: number[] | null
+          id: string
+          interval_minutes: number | null
+          is_active: boolean | null
+          last_run_at: string | null
+          next_run_at: string | null
+          schedule_type: Database["public"]["Enums"]["schedule_type"]
+          time_of_day: string | null
+          timezone: string | null
+          updated_at: string
+        }
+        Insert: {
+          automation_id: string
+          created_at?: string
+          cron_expression?: string | null
+          days_of_week?: number[] | null
+          id?: string
+          interval_minutes?: number | null
+          is_active?: boolean | null
+          last_run_at?: string | null
+          next_run_at?: string | null
+          schedule_type?: Database["public"]["Enums"]["schedule_type"]
+          time_of_day?: string | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          automation_id?: string
+          created_at?: string
+          cron_expression?: string | null
+          days_of_week?: number[] | null
+          id?: string
+          interval_minutes?: number | null
+          is_active?: boolean | null
+          last_run_at?: string | null
+          next_run_at?: string | null
+          schedule_type?: Database["public"]["Enums"]["schedule_type"]
+          time_of_day?: string | null
+          timezone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -64,7 +248,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      execution_status:
+        | "pending"
+        | "running"
+        | "success"
+        | "failed"
+        | "cancelled"
+      media_type: "image" | "audio" | "video"
+      schedule_type: "once" | "daily" | "weekly" | "monthly" | "interval"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -191,6 +382,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      execution_status: [
+        "pending",
+        "running",
+        "success",
+        "failed",
+        "cancelled",
+      ],
+      media_type: ["image", "audio", "video"],
+      schedule_type: ["once", "daily", "weekly", "monthly", "interval"],
+    },
   },
 } as const
