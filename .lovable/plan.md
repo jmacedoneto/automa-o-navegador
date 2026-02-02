@@ -1,185 +1,213 @@
 
-# Plano: Melhorar Formulario + Upload Multimodal
+# Plano: Live Preview - Visualização em Tempo Real
 
 ## Resumo
 
-Reorganizar o editor de automacao para:
-1. Tornar campos de login/senha visiveis na aba de configuracao (com checkbox para ativar)
-2. Marcar Google Sheets como opcional
-3. Adicionar upload de audio, imagem e video na aba de Passos para descrever automacoes
+Adicionar botão de "Live Preview" que, ao ser clicado durante uma execução ou ao iniciar uma, abre uma janela/modal exibindo a tela do Browserless em tempo real - mostrando o mouse se movendo, cliques acontecendo, etc.
 
 ---
 
-## 1. Reorganizacao da Aba "Configuracao"
+## Como Funciona
 
-### Alteracoes no Formulario
-
-**Campo ERP URL + Credenciais**
-- Adicionar checkbox "Este ERP requer login?" abaixo do campo URL do ERP
-- Quando marcado, exibir campos de usuario e senha diretamente na aba de configuracao
-- Remover a aba separada de "Credenciais" (mover para dentro de Configuracao)
-
-**Campo Google Sheets**
-- Adicionar texto "(opcional)" ao label
-- Manter o campo, mas deixar claro que nao e obrigatorio
-
-### Layout Proposto
+O Browserless oferece uma API chamada `Browserless.liveURL` que gera um link temporário para visualizar a sessão do navegador em tempo real. Este link pode ser embutido em um iframe ou aberto em nova janela.
 
 ```text
 +------------------------------------------+
-|  INFORMACOES BASICAS                     |
+|  [Executar]  [Executar com Live Preview] |
 +------------------------------------------+
-|  Nome da Automacao *                     |
-|  [____________________________________]  |
-|                                          |
-|  Descricao                               |
-|  [____________________________________]  |
+         |
+         v
 +------------------------------------------+
-|  URL DO ERP                              |
+|  Modal: Live Preview                     |
 +------------------------------------------+
-|  URL do ERP                              |
-|  [____________________________________]  |
-|                                          |
-|  [x] Este ERP requer login               |
-|                                          |
-|  +-- Campos que aparecem se marcado --+  |
-|  |  Usuario        Senha              |  |
-|  |  [__________]   [__________]       |  |
 |  +------------------------------------+  |
-+------------------------------------------+
-|  INTEGRACAO (opcional)                   |
-+------------------------------------------+
-|  URL do Google Sheets (opcional)         |
-|  [____________________________________]  |
+|  |                                    |  |
+|  |   [iframe com a tela do browser]   |  |
+|  |   Mouse se movendo em tempo real   |  |
+|  |                                    |  |
+|  +------------------------------------+  |
+|                                          |
+|  Status: Executando passo 3 de 8         |
+|  [X] Fechar Preview                      |
 +------------------------------------------+
 ```
 
 ---
 
-## 2. Upload Multimodal na Aba "Passos"
+## Arquitetura
 
-### Novo Componente: MediaUploader
+### Fluxo de Execução com Live Preview
 
-Adicionar zona de upload na aba de passos que aceita:
-- **Audio** (MP3, WAV, M4A) - para descrever por voz o que quer automatizar
-- **Imagem** (PNG, JPG, WEBP) - screenshots do ERP para a IA analisar
-- **Video** (MP4, WEBM) - gravacao de tela mostrando o fluxo
-
-### Layout da Aba Passos
-
-```text
-+------------------------------------------+
-|  DESCREVA A AUTOMACAO                    |
-+------------------------------------------+
-|  Explique o que voce quer automatizar:   |
-|  [Texto ou...                         ]  |
-|  [                                    ]  |
-|                                          |
-|  OU envie midias para a IA analisar:     |
-|                                          |
-|  +--------------------------------------+|
-|  |  [Icone Audio]  [Icone Imagem]       ||
-|  |  [Icone Video]                       ||
-|  |                                      ||
-|  |  Arraste arquivos ou clique          ||
-|  |  Audio, Imagem ou Video              ||
-|  +--------------------------------------+|
-|                                          |
-|  Arquivos enviados:                      |
-|  [X] audio_descricao.mp3 (transcrito)   |
-|  [X] screenshot_erp.png                 |
-|                                          |
-|  [Gerar Passos com IA]                   |
-+------------------------------------------+
-```
-
-### Fluxo de Processamento
-
-1. Usuario faz upload de arquivo
-2. Arquivo e salvo no Storage do backend
-3. URL e registrada na tabela `media_uploads`
-4. Ao clicar "Gerar Passos":
-   - Audio: transcrito pela IA (modelo com capacidade de audio)
-   - Imagem: analisada pela IA (visao computacional)
-   - Video: frames extraidos e analisados
-5. Conteudo processado e combinado com texto para gerar passos
+1. Usuario clica em "Executar com Live Preview"
+2. Frontend chama Edge Function `execute-automation`
+3. Edge Function conecta ao Browserless via WebSocket
+4. Edge Function solicita `Browserless.liveURL` e retorna a URL para o frontend
+5. Frontend abre modal/janela com iframe apontando para a liveURL
+6. Enquanto executa, Edge Function envia updates de progresso via resposta streaming ou polling
+7. Ao finalizar, Edge Function fecha sessao e frontend fecha o preview
 
 ---
 
-## 3. Alteracoes nas Abas
+## Arquivos a Criar
 
-### Antes (4 abas)
-1. Configuracao
-2. Passos
-3. Credenciais
-4. Webhook
+### 1. supabase/functions/execute-automation/index.ts
 
-### Depois (3 abas)
-1. **Configuracao** (inclui credenciais do ERP)
-2. **Passos** (inclui upload multimodal)
-3. **Webhook**
+Nova Edge Function que:
+- Recebe ID da automacao e flag `withLivePreview`
+- Busca dados da automacao e configuracoes globais do Browserless
+- Conecta ao Browserless via puppeteer-core
+- Se `withLivePreview=true`, gera liveURL e retorna imediatamente
+- Executa os passos sequencialmente
+- Salva log de execucao no banco
+- Envia dados para webhook se configurado
+
+Tecnologias:
+- puppeteer-core (conectar via WebSocket ao Browserless)
+- CDP Session para chamar `Browserless.liveURL`
+
+### 2. src/components/automation/LivePreviewModal.tsx
+
+Modal que:
+- Recebe a liveURL e a exibe em um iframe
+- Mostra status de execucao (passo atual)
+- Botao para fechar o preview
+- Indicador visual de que esta ao vivo
+
+### 3. src/services/executionService.ts
+
+Novo service para:
+- Chamar a Edge Function de execucao
+- Gerenciar estado da execucao (polling ou streaming)
+- Retornar liveURL para o componente
+
+---
+
+## Arquivos a Modificar
+
+### 1. src/pages/Dashboard.tsx
+
+- Atualizar `handleExecute` para suportar modo com live preview
+- Adicionar estado para controlar o modal de live preview
+- Passar liveURL para o modal
+
+### 2. src/components/automation/AutomationCard.tsx
+
+- Adicionar botao "Live Preview" ao lado de "Executar"
+- Ou transformar "Executar" em dropdown com opcoes:
+  - Executar (background)
+  - Executar com Live Preview
+
+### 3. src/types/automation.ts
+
+- Adicionar interface `ExecutionSession` com campos:
+  - `liveUrl?: string`
+  - `executionId: string`
+  - `status: 'starting' | 'running' | 'completed' | 'failed'`
+  - `currentStep: number`
+  - `totalSteps: number`
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivos a Criar
+### Edge Function: execute-automation
 
-**src/components/automation/MediaUploader.tsx**
-- Componente de upload drag-and-drop
-- Preview de arquivos enviados
-- Botao para remover arquivos
-- Indicador de processamento
+```typescript
+// Estrutura basica
+import puppeteer from 'puppeteer-core';
 
-**src/services/mediaService.ts**
-- Upload de arquivos para Storage
-- Registro na tabela `media_uploads`
-- Processamento de audio/imagem/video
+// 1. Conectar ao Browserless
+const browser = await puppeteer.connect({
+  browserWSEndpoint: `wss://${browserlessUrl}?token=${token}`
+});
 
-### Arquivos a Modificar
+const page = await browser.newPage();
+const cdp = await page.createCDPSession();
 
-**src/pages/AutomationEditor.tsx**
-- Remover aba "Credenciais"
-- Adicionar checkbox "Requer login" na aba Configuracao
-- Mostrar campos usuario/senha condicionalmente
-- Adicionar MediaUploader na aba Passos
-- Atualizar logica de salvamento
+// 2. Gerar LiveURL (se solicitado)
+if (withLivePreview) {
+  const { liveURL } = await cdp.send('Browserless.liveURL', {
+    timeout: 300000, // 5 minutos
+    quality: 70,
+  });
+  // Retornar liveURL para o frontend
+}
 
-**supabase/functions/generate-steps/index.ts**
-- Adicionar suporte a entrada multimodal
-- Processar imagens (modelo com visao)
-- Processar audio (modelo com transcricao)
-- Combinar todas as fontes de informacao
+// 3. Executar passos
+for (const step of steps) {
+  // navigate, click, type, wait, screenshot, extractTable
+}
 
-### Migracao de Banco
+// 4. Salvar resultados
+await browser.close();
+```
 
-- Criar bucket de storage `media-uploads`
-- Configurar politicas de acesso
+### LivePreviewModal Component
 
-### Estrutura de Dados
+```typescript
+interface LivePreviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  liveUrl: string;
+  automationName: string;
+  currentStep: number;
+  totalSteps: number;
+  status: 'starting' | 'running' | 'completed' | 'failed';
+}
+```
 
-A tabela `media_uploads` ja existe com os campos necessarios:
-- `file_type`: 'image' | 'audio' | 'video'
-- `file_url`: URL do arquivo no storage
-- `transcription`: texto transcrito (para audio)
-- `analysis`: resultado da analise de IA
+### Fluxo de Estados
+
+```text
+[Clique no botao]
+       |
+       v
+[Modal abre com "Iniciando..."]
+       |
+       v
+[Edge Function retorna liveURL]
+       |
+       v
+[iframe carrega a sessao ao vivo]
+       |
+       v
+[Polling verifica progresso a cada 2s]
+       |
+       v
+[Execucao completa]
+       |
+       v
+[Modal mostra "Concluido!" com botao fechar]
+```
 
 ---
 
-## Validacoes
+## Consideracoes de Seguranca
 
-- Nome da automacao: obrigatorio
-- URL do ERP: obrigatorio
-- Credenciais: opcionais (aparecem se checkbox marcado)
-- Google Sheets URL: opcional
-- Passos: obrigatorio (pelo menos 1 passo)
+- A liveURL e temporaria e expira apos o timeout
+- Nao requer autenticacao adicional (ja esta na sessao)
+- O iframe tem sandbox para seguranca
 
 ---
 
-## Beneficios
+## Ordem de Implementacao
 
-- **UX melhorada**: Credenciais visiveis sem mudar de aba
-- **Flexibilidade**: Google Sheets claramente opcional
-- **Multimodal**: Usuario pode descrever por voz, mostrar screenshots ou gravar video
-- **Acessibilidade**: Quem prefere falar pode usar audio
-- **Precisao**: Screenshots ajudam a IA entender o layout do ERP
+| Passo | Arquivo | Descricao |
+|-------|---------|-----------|
+| 1 | `execute-automation/index.ts` | Edge Function de execucao com suporte a liveURL |
+| 2 | `executionService.ts` | Service para chamar a Edge Function |
+| 3 | `LivePreviewModal.tsx` | Modal com iframe para exibir a sessao |
+| 4 | `AutomationCard.tsx` | Adicionar botao "Live Preview" |
+| 5 | `Dashboard.tsx` | Integrar modal e gerenciar estado |
+| 6 | `automation.ts` | Tipos para sessao de execucao |
+
+---
+
+## Resultado Esperado
+
+- Usuario pode clicar em "Live Preview" em qualquer automacao
+- Um modal abre mostrando a tela do navegador em tempo real
+- O usuario ve o mouse se movendo, campos sendo preenchidos, botoes sendo clicados
+- Ao final, o modal mostra o resultado (sucesso/erro)
+- O usuario pode fechar o preview a qualquer momento
+
