@@ -22,10 +22,12 @@ import {
   Bot, 
   ArrowLeft,
   Settings,
-  Clock,
   Webhook,
-  Key
+  Key,
+  Globe,
+  FileSpreadsheet
 } from "lucide-react";
+import { Header } from "@/components/layout/Header";
 
 export default function AutomationEditor() {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +42,6 @@ export default function AutomationEditor() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [erpUrl, setErpUrl] = useState("");
-  const [browserlessUrl, setBrowserlessUrl] = useState("");
   const [sheetsUrl, setSheetsUrl] = useState("");
   const [instructions, setInstructions] = useState("");
   const [steps, setSteps] = useState<AutomationStep[]>([]);
@@ -67,7 +68,6 @@ export default function AutomationEditor() {
       setName(data.name);
       setDescription(data.description || "");
       setErpUrl(data.erp_url);
-      setBrowserlessUrl(data.browserless_url);
       setSheetsUrl(data.sheets_url);
       setInstructions(data.instructions);
       setSteps(data.steps || []);
@@ -120,7 +120,7 @@ export default function AutomationEditor() {
         name,
         description: description || null,
         erp_url: erpUrl,
-        browserless_url: browserlessUrl,
+        browserless_url: "", // Agora vem das configurações globais
         sheets_url: sheetsUrl,
         instructions,
         steps,
@@ -148,17 +148,22 @@ export default function AutomationEditor() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
+      <Header />
+
+      {/* Sub-header */}
+      <div className="border-b bg-card/50">
+        <div className="container py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
@@ -173,56 +178,63 @@ export default function AutomationEditor() {
                 </p>
               </div>
             </div>
-            <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving || !name.trim()}
+              className="gap-2 gradient-primary text-primary-foreground"
+            >
               {isSaving ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Salvando...
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="h-4 w-4" />
                   Salvar
                 </>
               )}
             </Button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-6">
+      <main className="container py-6">
         <Tabs defaultValue="config" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
-            <TabsTrigger value="config" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-muted/50">
+            <TabsTrigger value="config" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="h-4 w-4" />
-              Configuração
+              <span className="hidden sm:inline">Configuração</span>
             </TabsTrigger>
-            <TabsTrigger value="steps" className="flex items-center gap-2">
+            <TabsTrigger value="steps" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Bot className="h-4 w-4" />
-              Passos
+              <span className="hidden sm:inline">Passos</span>
             </TabsTrigger>
-            <TabsTrigger value="credentials" className="flex items-center gap-2">
+            <TabsTrigger value="credentials" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Key className="h-4 w-4" />
-              Credenciais
+              <span className="hidden sm:inline">Credenciais</span>
             </TabsTrigger>
-            <TabsTrigger value="webhook" className="flex items-center gap-2">
+            <TabsTrigger value="webhook" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Webhook className="h-4 w-4" />
-              Webhook
+              <span className="hidden sm:inline">Webhook</span>
             </TabsTrigger>
           </TabsList>
 
           {/* Config Tab */}
           <TabsContent value="config" className="space-y-6">
-            <Card>
+            <Card className="border-l-4 border-l-primary">
               <CardHeader>
-                <CardTitle>Informações Básicas</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-primary" />
+                  Informações Básicas
+                </CardTitle>
                 <CardDescription>
                   Defina o nome e as URLs necessárias para a automação
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome da Automação *</Label>
                     <Input
@@ -243,9 +255,12 @@ export default function AutomationEditor() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="erpUrl">URL do ERP</Label>
+                    <Label htmlFor="erpUrl" className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-muted-foreground" />
+                      URL do ERP
+                    </Label>
                     <Input
                       id="erpUrl"
                       placeholder="https://seu-erp.com.br"
@@ -254,16 +269,10 @@ export default function AutomationEditor() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="browserlessUrl">URL do Browserless</Label>
-                    <Input
-                      id="browserlessUrl"
-                      placeholder="http://seu-vps:3000"
-                      value={browserlessUrl}
-                      onChange={(e) => setBrowserlessUrl(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sheetsUrl">URL do Google Sheets</Label>
+                    <Label htmlFor="sheetsUrl" className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                      URL do Google Sheets
+                    </Label>
                     <Input
                       id="sheetsUrl"
                       placeholder="https://docs.google.com/spreadsheets/d/..."
@@ -278,10 +287,10 @@ export default function AutomationEditor() {
 
           {/* Steps Tab */}
           <TabsContent value="steps" className="space-y-6">
-            <Card>
+            <Card className="border-l-4 border-l-accent">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
+                  <Sparkles className="h-5 w-5 text-accent" />
                   Descreva a Automação
                 </CardTitle>
                 <CardDescription>
@@ -299,24 +308,25 @@ export default function AutomationEditor() {
                 <Button 
                   onClick={handleGenerateSteps} 
                   disabled={isGenerating || !instructions.trim()}
-                  className="w-full"
+                  className="w-full gap-2 gradient-primary text-primary-foreground"
                 >
                   {isGenerating ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Gerando passos...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-4 w-4 mr-2" />
+                      <Sparkles className="h-4 w-4" />
                       Gerar Passos com IA
                     </>
                   )}
                 </Button>
 
                 {notes && (
-                  <div className="p-3 bg-muted rounded-lg text-sm">
-                    <strong>Observações da IA:</strong> {notes}
+                  <div className="p-4 bg-info/10 border border-info/20 rounded-lg text-sm">
+                    <strong className="text-info">Observações da IA:</strong>
+                    <p className="mt-1 text-muted-foreground">{notes}</p>
                   </div>
                 )}
               </CardContent>
@@ -324,7 +334,10 @@ export default function AutomationEditor() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Passos da Automação</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-primary" />
+                  Passos da Automação
+                </CardTitle>
                 <CardDescription>
                   Revise e ajuste os passos gerados
                 </CardDescription>
@@ -337,10 +350,10 @@ export default function AutomationEditor() {
 
           {/* Credentials Tab */}
           <TabsContent value="credentials" className="space-y-6">
-            <Card>
+            <Card className="border-l-4 border-l-warning">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Key className="h-5 w-5" />
+                  <Key className="h-5 w-5 text-warning" />
                   Credenciais do ERP
                 </CardTitle>
                 <CardDescription>
@@ -349,7 +362,7 @@ export default function AutomationEditor() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 max-w-xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
                   <div className="space-y-2">
                     <Label htmlFor="username">Usuário</Label>
                     <Input
@@ -379,10 +392,10 @@ export default function AutomationEditor() {
 
           {/* Webhook Tab */}
           <TabsContent value="webhook" className="space-y-6">
-            <Card>
+            <Card className="border-l-4 border-l-info">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Webhook className="h-5 w-5" />
+                  <Webhook className="h-5 w-5 text-info" />
                   Integração Webhook
                 </CardTitle>
                 <CardDescription>

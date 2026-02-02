@@ -5,17 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { 
   Play, 
-  Pause, 
   Settings, 
   Trash2, 
   Clock, 
   CheckCircle2, 
   XCircle, 
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Zap
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface AutomationCardProps {
   automation: Automation;
@@ -25,31 +26,48 @@ interface AutomationCardProps {
   onExecute: (id: string) => void;
 }
 
-function getStatusIcon(status?: string) {
+function getStatusConfig(status?: string) {
   switch (status) {
     case 'success':
-      return <CheckCircle2 className="h-4 w-4 text-primary" />;
+      return {
+        icon: CheckCircle2,
+        label: 'Sucesso',
+        color: 'text-success',
+        bgColor: 'bg-success/10',
+        borderColor: 'border-l-success',
+      };
     case 'failed':
-      return <XCircle className="h-4 w-4 text-destructive" />;
+      return {
+        icon: XCircle,
+        label: 'Falhou',
+        color: 'text-destructive',
+        bgColor: 'bg-destructive/10',
+        borderColor: 'border-l-destructive',
+      };
     case 'running':
-      return <Clock className="h-4 w-4 text-accent-foreground animate-pulse" />;
-    default:
-      return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
-  }
-}
-
-function getStatusLabel(status?: string) {
-  switch (status) {
-    case 'success':
-      return 'Sucesso';
-    case 'failed':
-      return 'Falhou';
-    case 'running':
-      return 'Executando';
+      return {
+        icon: Clock,
+        label: 'Executando',
+        color: 'text-warning',
+        bgColor: 'bg-warning/10',
+        borderColor: 'border-l-warning',
+      };
     case 'pending':
-      return 'Pendente';
+      return {
+        icon: Clock,
+        label: 'Pendente',
+        color: 'text-info',
+        bgColor: 'bg-info/10',
+        borderColor: 'border-l-info',
+      };
     default:
-      return 'Nunca executado';
+      return {
+        icon: AlertCircle,
+        label: 'Nunca executado',
+        color: 'text-muted-foreground',
+        bgColor: 'bg-muted',
+        borderColor: 'border-l-muted-foreground',
+      };
   }
 }
 
@@ -60,12 +78,27 @@ export function AutomationCard({
   onToggleStatus, 
   onExecute 
 }: AutomationCardProps) {
+  const statusConfig = getStatusConfig(automation.last_execution_status);
+  const StatusIcon = statusConfig.icon;
+
   return (
-    <Card className={`transition-all ${!automation.is_active ? 'opacity-60' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
+    <Card 
+      className={cn(
+        "group relative overflow-hidden transition-all duration-300 hover:shadow-lg border-l-4",
+        statusConfig.borderColor,
+        !automation.is_active && "opacity-60"
+      )}
+    >
+      {/* Decorative gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 transition-opacity group-hover:opacity-100" />
+      
+      <CardHeader className="relative pb-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate">{automation.name}</CardTitle>
+            <CardTitle className="text-lg truncate flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary flex-shrink-0" />
+              {automation.name}
+            </CardTitle>
             {automation.description && (
               <CardDescription className="mt-1 truncate">
                 {automation.description}
@@ -75,16 +108,15 @@ export function AutomationCard({
           <Switch
             checked={automation.is_active ?? true}
             onCheckedChange={(checked) => onToggleStatus(automation.id, checked)}
+            className="data-[state=checked]:bg-primary"
           />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="relative space-y-4">
         {/* Status e última execução */}
-        <div className="flex items-center gap-2 text-sm">
-          {getStatusIcon(automation.last_execution_status)}
-          <span className="text-muted-foreground">
-            {getStatusLabel(automation.last_execution_status)}
-          </span>
+        <div className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-sm", statusConfig.bgColor)}>
+          <StatusIcon className={cn("h-4 w-4", statusConfig.color)} />
+          <span className={statusConfig.color}>{statusConfig.label}</span>
           {automation.last_execution_at && (
             <span className="text-muted-foreground">
               · {formatDistanceToNow(new Date(automation.last_execution_at), { 
@@ -97,17 +129,17 @@ export function AutomationCard({
 
         {/* URLs e info */}
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="secondary" className="text-xs font-medium">
             {automation.steps?.length || 0} passos
           </Badge>
           {automation.erp_url && (
-            <Badge variant="secondary" className="text-xs">
-              <ExternalLink className="h-3 w-3 mr-1" />
+            <Badge variant="outline" className="text-xs gap-1">
+              <ExternalLink className="h-3 w-3" />
               ERP
             </Badge>
           )}
           {automation.webhook_url && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="outline" className="text-xs bg-accent/10 border-accent/30 text-accent-foreground">
               Webhook
             </Badge>
           )}
@@ -119,22 +151,24 @@ export function AutomationCard({
             size="sm" 
             onClick={() => onExecute(automation.id)}
             disabled={!automation.is_active}
+            className="gap-1.5 bg-primary hover:bg-primary/90"
           >
-            <Play className="h-4 w-4 mr-1" />
+            <Play className="h-4 w-4" />
             Executar
           </Button>
           <Button 
             size="sm" 
             variant="outline"
             onClick={() => onEdit(automation.id)}
+            className="gap-1.5"
           >
-            <Settings className="h-4 w-4 mr-1" />
+            <Settings className="h-4 w-4" />
             Editar
           </Button>
           <Button 
             size="sm" 
             variant="ghost"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
             onClick={() => onDelete(automation.id)}
           >
             <Trash2 className="h-4 w-4" />

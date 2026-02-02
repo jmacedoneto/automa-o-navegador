@@ -4,8 +4,9 @@ import { AutomationCard } from "./AutomationCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Filter, Plus, Bot } from "lucide-react";
+import { Search, Filter, Plus, Bot, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AutomationListProps {
   automations: Automation[];
@@ -47,10 +48,17 @@ export function AutomationList({
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-48 rounded-lg bg-muted animate-pulse" />
-        ))}
+      <div className="space-y-6">
+        <div className="flex gap-4">
+          <Skeleton className="h-10 flex-1 max-w-sm" />
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-56 rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -66,12 +74,12 @@ export function AutomationList({
               placeholder="Buscar automações..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 bg-card"
             />
           </div>
           <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as FilterStatus)}>
-            <SelectTrigger className="w-32">
-              <Filter className="h-4 w-4 mr-2" />
+            <SelectTrigger className="w-36 bg-card">
+              <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -81,27 +89,35 @@ export function AutomationList({
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => navigate('/automation/new')}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button 
+          onClick={() => navigate('/automation/new')}
+          className="gap-2 gradient-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow"
+        >
+          <Plus className="h-4 w-4" />
           Nova Automação
         </Button>
       </div>
 
       {/* Lista de automações */}
       {filteredAutomations.length === 0 ? (
-        <div className="text-center py-12">
-          <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">Nenhuma automação encontrada</h3>
-          <p className="text-muted-foreground mt-1">
+        <div className="text-center py-16 px-4">
+          <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-accent/20 mb-6">
+            <Bot className="h-10 w-10 text-primary" />
+          </div>
+          <h3 className="text-xl font-semibold">Nenhuma automação encontrada</h3>
+          <p className="text-muted-foreground mt-2 max-w-md mx-auto">
             {search || filterStatus !== 'all' 
-              ? "Tente ajustar os filtros"
-              : "Crie sua primeira automação para começar"
+              ? "Tente ajustar os filtros de busca"
+              : "Crie sua primeira automação para começar a extrair dados do seu ERP automaticamente"
             }
           </p>
           {!search && filterStatus === 'all' && (
-            <Button className="mt-4" onClick={() => navigate('/automation/new')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Automação
+            <Button 
+              className="mt-6 gap-2 gradient-primary text-primary-foreground shadow-lg shadow-primary/25"
+              onClick={() => navigate('/automation/new')}
+            >
+              <Sparkles className="h-4 w-4" />
+              Criar Primeira Automação
             </Button>
           )}
         </div>
