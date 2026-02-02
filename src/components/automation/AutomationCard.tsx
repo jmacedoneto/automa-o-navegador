@@ -3,6 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Play, 
   Settings, 
@@ -12,7 +18,9 @@ import {
   XCircle, 
   AlertCircle,
   ExternalLink,
-  Zap
+  Zap,
+  Monitor,
+  ChevronDown
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,7 +31,7 @@ interface AutomationCardProps {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleStatus: (id: string, isActive: boolean) => void;
-  onExecute: (id: string) => void;
+  onExecute: (id: string, withLivePreview?: boolean) => void;
 }
 
 function getStatusConfig(status?: string) {
@@ -147,15 +155,29 @@ export function AutomationCard({
 
         {/* Ações */}
         <div className="flex items-center gap-2 pt-2">
-          <Button 
-            size="sm" 
-            onClick={() => onExecute(automation.id)}
-            disabled={!automation.is_active}
-            className="gap-1.5 bg-primary hover:bg-primary/90"
-          >
-            <Play className="h-4 w-4" />
-            Executar
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                size="sm" 
+                disabled={!automation.is_active}
+                className="gap-1.5 bg-primary hover:bg-primary/90"
+              >
+                <Play className="h-4 w-4" />
+                Executar
+                <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => onExecute(automation.id, false)}>
+                <Play className="h-4 w-4 mr-2" />
+                Executar em Background
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onExecute(automation.id, true)}>
+                <Monitor className="h-4 w-4 mr-2" />
+                Executar com Live Preview
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button 
             size="sm" 
             variant="outline"

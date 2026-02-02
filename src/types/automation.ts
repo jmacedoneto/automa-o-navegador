@@ -84,3 +84,11 @@ export interface GenerateStepsResponse {
   steps: AutomationStep[];
   notes: string;
 }
+
+export interface ExecutionSession {
+  executionId: string;
+  liveUrl?: string;
+  status: 'starting' | 'running' | 'completed' | 'success' | 'failed';
+  currentStep: number;
+  totalSteps: number;
+}

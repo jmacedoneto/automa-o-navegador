@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Automation } from "@/types/automation";
 import { AutomationList } from "@/components/automation/AutomationList";
+import { LivePreviewModal } from "@/components/automation/LivePreviewModal";
 import { 
   fetchAutomations, 
   deleteAutomation, 
   toggleAutomationStatus 
 } from "@/services/automationService";
+import { executeAutomation } from "@/services/executionService";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import {
@@ -19,10 +21,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+interface LivePreviewState {
+  isOpen: boolean;
+  liveUrl: string | null;
+  automationName: string;
+  executionId: string | null;
+}
+
 export default function Dashboard() {
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [livePreview, setLivePreview] = useState<LivePreviewState>({
+    isOpen: false,
+    liveUrl: null,
+    automationName: '',
+    executionId: null,
+  });
 
   useEffect(() => {
     loadAutomations();
@@ -68,9 +83,62 @@ export default function Dashboard() {
     }
   };
 
-  const handleExecute = async (id: string) => {
-    toast.info("Funcionalidade de execução em desenvolvimento");
-    // TODO: Implementar execução via Edge Function
+  const handleExecute = async (id: string, withLivePreview: boolean = false) => {
+    const automation = automations.find(a => a.id === id);
+    
+    if (withLivePreview) {
+      // Open modal immediately with loading state
+      setLivePreview({
+        isOpen: true,
+        liveUrl: null,
+        automationName: automation?.name || 'Automação',
+        executionId: null,
+      });
+    }
+
+    toast.info(withLivePreview ? "Iniciando com Live Preview..." : "Executando automação...");
+    
+    try {
+      const result = await executeAutomation(id, { withLivePreview });
+      
+      if (!result.success) {
+        toast.error(result.error || "Erro ao executar automação");
+        if (withLivePreview) {
+          setLivePreview(prev => ({ ...prev, isOpen: false }));
+        }
+        return;
+      }
+
+      if (withLivePreview && result.liveUrl) {
+        setLivePreview(prev => ({
+          ...prev,
+          liveUrl: result.liveUrl || null,
+          executionId: result.executionId || null,
+        }));
+      } else if (!withLivePreview) {
+        toast.success("Execução iniciada com sucesso!");
+      }
+
+      // Reload automations to update status
+      loadAutomations();
+    } catch (error) {
+      console.error("Error executing automation:", error);
+      toast.error("Erro ao executar automação");
+      if (withLivePreview) {
+        setLivePreview(prev => ({ ...prev, isOpen: false }));
+      }
+    }
+  };
+
+  const handleCloseLivePreview = () => {
+    setLivePreview({
+      isOpen: false,
+      liveUrl: null,
+      automationName: '',
+      executionId: null,
+    });
+    // Reload to get updated execution status
+    loadAutomations();
   };
 
   return (
@@ -116,6 +184,15 @@ export default function Dashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Live Preview Modal */}
+      <LivePreviewModal
+        isOpen={livePreview.isOpen}
+        onClose={handleCloseLivePreview}
+        liveUrl={livePreview.liveUrl}
+        automationName={livePreview.automationName}
+        executionId={livePreview.executionId}
+      />
     </div>
   );
 }
