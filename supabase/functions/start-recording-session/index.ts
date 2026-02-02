@@ -140,12 +140,14 @@ serve(async (req: Request) => {
     // Build the DevTools URL for live viewing
     // The devtoolsFrontendUrl is like: /devtools/inspector.html?ws=0.0.0.0:3000/devtools/page/PAGE_ID
     // We need to replace the internal Docker address with the public hostname
+    // AND change ws= to wss= since Traefik terminates TLS
     let devtoolsPath = currentSession.devtoolsFrontendUrl;
     
     // Replace internal addresses (0.0.0.0:PORT, localhost:PORT) with public hostname
+    // Also ensure we use wss:// since the connection goes through HTTPS/TLS
     devtoolsPath = devtoolsPath
-      .replace(/ws=0\.0\.0\.0:\d+/g, `ws=${cleanBrowserlessUrl}`)
-      .replace(/ws=localhost:\d+/g, `ws=${cleanBrowserlessUrl}`)
+      .replace(/ws=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
+      .replace(/ws=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`)
       .replace(/wss=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
       .replace(/wss=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`);
     
