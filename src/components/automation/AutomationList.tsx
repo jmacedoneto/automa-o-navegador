@@ -13,7 +13,7 @@ interface AutomationListProps {
   isLoading: boolean;
   onDelete: (id: string) => void;
   onToggleStatus: (id: string, isActive: boolean) => void;
-  onExecute: (id: string) => void;
+  onExecute: (id: string, withLivePreview?: boolean) => void;
 }
 
 type FilterStatus = 'all' | 'active' | 'inactive';
