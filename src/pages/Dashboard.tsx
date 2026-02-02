@@ -7,7 +7,7 @@ import {
   toggleAutomationStatus 
 } from "@/services/automationService";
 import { toast } from "sonner";
-import { Bot } from "lucide-react";
+import { Header } from "@/components/layout/Header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,23 +75,17 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Bot className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold">Automação ERP</h1>
-              <p className="text-sm text-muted-foreground">
-                Gerencie suas automações de extração de dados
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie suas automações de extração de dados
+          </p>
+        </div>
+
         <AutomationList
           automations={automations}
           isLoading={isLoading}
