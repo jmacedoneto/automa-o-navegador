@@ -1,140 +1,185 @@
 
-# Plano: Corrigir Bug de Navegação "Nova Automação"
+# Plano: Melhorar Formulario + Upload Multimodal
 
-## Problema Identificado
+## Resumo
 
-Quando o usuário clica em "Nova Automação", a tela fica carregando infinitamente.
-
-### Causa Raiz
-
-No arquivo `src/App.tsx`, existem duas rotas conflitantes:
-
-```typescript
-<Route path="/automation/new" element={<AutomationEditor />} />
-<Route path="/automation/:id" element={<AutomationEditor />} />
-```
-
-Quando o usuário acessa `/automation/new`:
-- A **primeira rota** (path exato) é correspondida
-- O parâmetro `id` do `useParams()` fica **undefined** (não há `:id` nessa rota)
-- No `AutomationEditor`, a verificação `id === 'new'` retorna **false**
-- `isLoading` começa como **true** (pois `!isNew` = `!false` = `true`)
-- O componente tenta carregar uma automação com `id = undefined`, que falha
-- A tela fica presa no estado de carregamento
-
-### Solução
-
-Corrigir a lógica de verificação em `AutomationEditor.tsx`:
-
-```typescript
-// Antes (incorreto)
-const isNew = id === 'new';
-
-// Depois (correto)
-const isNew = !id;  // Se não há id, é uma nova automação
-```
-
-Ou alternativamente, remover a rota duplicada e usar apenas a rota com parâmetro:
-
-```typescript
-// Apenas uma rota
-<Route path="/automation/:id" element={<AutomationEditor />} />
-```
-
-E atualizar a navegação para usar `/automation/new` (onde `id` seria `'new'`).
+Reorganizar o editor de automacao para:
+1. Tornar campos de login/senha visiveis na aba de configuracao (com checkbox para ativar)
+2. Marcar Google Sheets como opcional
+3. Adicionar upload de audio, imagem e video na aba de Passos para descrever automacoes
 
 ---
 
-## Arquivos a Modificar
+## 1. Reorganizacao da Aba "Configuracao"
 
-### 1. src/pages/AutomationEditor.tsx
+### Alteracoes no Formulario
 
-**Alteração na linha 35:**
+**Campo ERP URL + Credenciais**
+- Adicionar checkbox "Este ERP requer login?" abaixo do campo URL do ERP
+- Quando marcado, exibir campos de usuario e senha diretamente na aba de configuracao
+- Remover a aba separada de "Credenciais" (mover para dentro de Configuracao)
 
-```typescript
-// Antes
-const isNew = id === 'new';
+**Campo Google Sheets**
+- Adicionar texto "(opcional)" ao label
+- Manter o campo, mas deixar claro que nao e obrigatorio
 
-// Depois  
-const isNew = !id || id === 'new';
-```
+### Layout Proposto
 
-Isso cobre ambos os casos:
-- Quando `id` é `undefined` (rota `/automation/new`)
-- Quando `id` é `'new'` (rota `/automation/:id` com valor `new`)
-
----
-
-## Correções Adicionais (Warnings React)
-
-Os warnings de "Function components cannot be given refs" são causados por componentes que não usam `forwardRef`. Embora não bloqueiem a funcionalidade, devem ser corrigidos:
-
-### 2. src/pages/AutomationEditor.tsx
-
-Converter para `forwardRef`:
-
-```typescript
-import { forwardRef } from "react";
-
-const AutomationEditor = forwardRef<HTMLDivElement>((props, ref) => {
-  // ... código existente
-});
-
-export default AutomationEditor;
-```
-
-### 3. src/components/layout/Header.tsx
-
-```typescript
-import { forwardRef } from "react";
-
-export const Header = forwardRef<HTMLElement>((props, ref) => {
-  // ... código existente, adicionar ref ao <header>
-});
-```
-
-### 4. src/pages/Dashboard.tsx
-
-```typescript
-import { forwardRef } from "react";
-
-const Dashboard = forwardRef<HTMLDivElement>((props, ref) => {
-  // ... código existente
-});
-
-export default Dashboard;
-```
-
-### 5. src/pages/Settings.tsx
-
-```typescript
-import { forwardRef } from "react";
-
-const Settings = forwardRef<HTMLDivElement>((props, ref) => {
-  // ... código existente
-});
-
-export default Settings;
+```text
++------------------------------------------+
+|  INFORMACOES BASICAS                     |
++------------------------------------------+
+|  Nome da Automacao *                     |
+|  [____________________________________]  |
+|                                          |
+|  Descricao                               |
+|  [____________________________________]  |
++------------------------------------------+
+|  URL DO ERP                              |
++------------------------------------------+
+|  URL do ERP                              |
+|  [____________________________________]  |
+|                                          |
+|  [x] Este ERP requer login               |
+|                                          |
+|  +-- Campos que aparecem se marcado --+  |
+|  |  Usuario        Senha              |  |
+|  |  [__________]   [__________]       |  |
+|  +------------------------------------+  |
++------------------------------------------+
+|  INTEGRACAO (opcional)                   |
++------------------------------------------+
+|  URL do Google Sheets (opcional)         |
+|  [____________________________________]  |
++------------------------------------------+
 ```
 
 ---
 
-## Resumo das Alterações
+## 2. Upload Multimodal na Aba "Passos"
 
-| Arquivo | Tipo | Descrição |
-|---------|------|-----------|
-| `AutomationEditor.tsx` | Correção Crítica | Ajustar lógica de `isNew` para aceitar `undefined` |
-| `AutomationEditor.tsx` | Melhoria | Adicionar `forwardRef` |
-| `Header.tsx` | Melhoria | Adicionar `forwardRef` |
-| `Dashboard.tsx` | Melhoria | Adicionar `forwardRef` |
-| `Settings.tsx` | Melhoria | Adicionar `forwardRef` |
+### Novo Componente: MediaUploader
+
+Adicionar zona de upload na aba de passos que aceita:
+- **Audio** (MP3, WAV, M4A) - para descrever por voz o que quer automatizar
+- **Imagem** (PNG, JPG, WEBP) - screenshots do ERP para a IA analisar
+- **Video** (MP4, WEBM) - gravacao de tela mostrando o fluxo
+
+### Layout da Aba Passos
+
+```text
++------------------------------------------+
+|  DESCREVA A AUTOMACAO                    |
++------------------------------------------+
+|  Explique o que voce quer automatizar:   |
+|  [Texto ou...                         ]  |
+|  [                                    ]  |
+|                                          |
+|  OU envie midias para a IA analisar:     |
+|                                          |
+|  +--------------------------------------+|
+|  |  [Icone Audio]  [Icone Imagem]       ||
+|  |  [Icone Video]                       ||
+|  |                                      ||
+|  |  Arraste arquivos ou clique          ||
+|  |  Audio, Imagem ou Video              ||
+|  +--------------------------------------+|
+|                                          |
+|  Arquivos enviados:                      |
+|  [X] audio_descricao.mp3 (transcrito)   |
+|  [X] screenshot_erp.png                 |
+|                                          |
+|  [Gerar Passos com IA]                   |
++------------------------------------------+
+```
+
+### Fluxo de Processamento
+
+1. Usuario faz upload de arquivo
+2. Arquivo e salvo no Storage do backend
+3. URL e registrada na tabela `media_uploads`
+4. Ao clicar "Gerar Passos":
+   - Audio: transcrito pela IA (modelo com capacidade de audio)
+   - Imagem: analisada pela IA (visao computacional)
+   - Video: frames extraidos e analisados
+5. Conteudo processado e combinado com texto para gerar passos
 
 ---
 
-## Resultado Esperado
+## 3. Alteracoes nas Abas
 
-Após a correção:
-1. Clicar em "Nova Automação" abrirá imediatamente o editor em branco
-2. Não haverá mais loading infinito
-3. Os warnings de `forwardRef` desaparecerão do console
-4. A navegação entre páginas funcionará corretamente
+### Antes (4 abas)
+1. Configuracao
+2. Passos
+3. Credenciais
+4. Webhook
+
+### Depois (3 abas)
+1. **Configuracao** (inclui credenciais do ERP)
+2. **Passos** (inclui upload multimodal)
+3. **Webhook**
+
+---
+
+## Detalhes Tecnicos
+
+### Arquivos a Criar
+
+**src/components/automation/MediaUploader.tsx**
+- Componente de upload drag-and-drop
+- Preview de arquivos enviados
+- Botao para remover arquivos
+- Indicador de processamento
+
+**src/services/mediaService.ts**
+- Upload de arquivos para Storage
+- Registro na tabela `media_uploads`
+- Processamento de audio/imagem/video
+
+### Arquivos a Modificar
+
+**src/pages/AutomationEditor.tsx**
+- Remover aba "Credenciais"
+- Adicionar checkbox "Requer login" na aba Configuracao
+- Mostrar campos usuario/senha condicionalmente
+- Adicionar MediaUploader na aba Passos
+- Atualizar logica de salvamento
+
+**supabase/functions/generate-steps/index.ts**
+- Adicionar suporte a entrada multimodal
+- Processar imagens (modelo com visao)
+- Processar audio (modelo com transcricao)
+- Combinar todas as fontes de informacao
+
+### Migracao de Banco
+
+- Criar bucket de storage `media-uploads`
+- Configurar politicas de acesso
+
+### Estrutura de Dados
+
+A tabela `media_uploads` ja existe com os campos necessarios:
+- `file_type`: 'image' | 'audio' | 'video'
+- `file_url`: URL do arquivo no storage
+- `transcription`: texto transcrito (para audio)
+- `analysis`: resultado da analise de IA
+
+---
+
+## Validacoes
+
+- Nome da automacao: obrigatorio
+- URL do ERP: obrigatorio
+- Credenciais: opcionais (aparecem se checkbox marcado)
+- Google Sheets URL: opcional
+- Passos: obrigatorio (pelo menos 1 passo)
+
+---
+
+## Beneficios
+
+- **UX melhorada**: Credenciais visiveis sem mudar de aba
+- **Flexibilidade**: Google Sheets claramente opcional
+- **Multimodal**: Usuario pode descrever por voz, mostrar screenshots ou gravar video
+- **Acessibilidade**: Quem prefere falar pode usar audio
+- **Precisao**: Screenshots ajudam a IA entender o layout do ERP
