@@ -1,93 +1,166 @@
 
-# Plano: Corrigir URL do DevTools - Substituir 0.0.0.0:3000 pelo Hostname Publico
+# Plano: Configurar Suporte WebSocket no Traefik para Browserless
 
-## Problema
+## Problema Identificado
 
-A URL do DevTools retornada pelo Browserless contem o endereco interno do container Docker:
-```
-ws=0.0.0.0:3000/devtools/page/...
-```
+A tela do DevTools fica em branco porque a conexão WebSocket não está sendo estabelecida corretamente. O Traefik precisa de configuração específica para permitir o upgrade de conexão HTTP para WebSocket.
 
-Isso nao funciona porque o navegador do usuario nao consegue acessar `0.0.0.0:3000` (endereco interno do Docker).
+## Solução
 
-## Solucao
+Adicionar labels no serviço Browserless no Docker Compose para configurar o Traefik a aceitar conexões WebSocket.
 
-Substituir o endereco interno pelo hostname publico do Browserless:
-```
-ws=browserless.apvsiguatemi.net/devtools/page/...
+---
+
+## Mudança Necessária no docker-compose.yml do Browserless
+
+Adicionar as seguintes labels ao serviço browserless:
+
+```yaml
+services:
+  browserless:
+    image: browserless/chrome:latest
+    # ... suas outras configuracoes ...
+    deploy:
+      labels:
+        # Labels existentes
+        - "traefik.enable=true"
+        - "traefik.http.routers.browserless.rule=Host(`browserless.apvsiguatemi.net`)"
+        - "traefik.http.routers.browserless.entrypoints=websecure"
+        - "traefik.http.routers.browserless.tls=true"
+        - "traefik.http.routers.browserless.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.browserless.service=browserless"
+        - "traefik.http.services.browserless.loadbalancer.server.port=3000"
+        
+        # NOVAS LABELS PARA WEBSOCKET
+        - "traefik.http.middlewares.browserless-ws.headers.customRequestHeaders.Connection=Upgrade"
+        - "traefik.http.middlewares.browserless-ws.headers.customRequestHeaders.Upgrade=websocket"
+        - "traefik.http.routers.browserless.middlewares=browserless-ws"
+        
+        # Tambem pode tentar com sticky sessions para WebSocket
+        - "traefik.http.services.browserless.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.browserless.loadbalancer.sticky.cookie.name=browserless_affinity"
 ```
 
 ---
 
-## Arquivo a Modificar
+## Configuracao Completa Atualizada
 
-### supabase/functions/start-recording-session/index.ts
+Aqui está o docker-compose.yml completo do Browserless com as correções:
 
-Adicionar logica para corrigir a URL do DevTools antes de retornar ao frontend.
+```yaml
+version: "3.7"
 
-```typescript
-// Linha ~142-152 - Apos obter o devtoolsFrontendUrl
+services:
+  browserless:
+    image: browserless/chrome:latest
+    networks:
+      - Deltanet
+    environment:
+      # --- Security (SSOT) ---
+      - TOKEN=DefinaUmaSenhaForteAqui123
+      
+      # --- Recording & Debugging ---
+      - HEADLESS=false
+      - ENABLE_API_GET=true
+      - ENABLE_CORS=true
+      - ENABLE_DEBUGGER=true    # ADICIONAR ESTA LINHA
+      
+      # --- Evasion & Stealth ---
+      - DEFAULT_STEALTH=true
+      - DEFAULT_BLOCK_ADS=true
+      
+      # --- Performance ---
+      - MAX_CONCURRENT_SESSIONS=20
+      - MAX_QUEUE_LENGTH=40
+      - CONNECTION_TIMEOUT=300000  # 5 minutos para gravacao
+      
+      # --- Workspace ---
+      - WORKSPACE_DELETE_EXPIRED=1
+      - WORKSPACE_EXPIRE_DAYS=1
+      - PREBOOT_CHROME=1
+      - KEEP_ALIVE=1
 
-const devtoolsPath = currentSession.devtoolsFrontendUrl;
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8192M
+        reservations:
+          cpus: "2"
+          memory: 4096M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.browserless.rule=Host(`browserless.apvsiguatemi.net`)"
+        - "traefik.http.routers.browserless.entrypoints=websecure"
+        - "traefik.http.routers.browserless.tls=true"
+        - "traefik.http.routers.browserless.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.browserless.service=browserless"
+        - "traefik.http.services.browserless.loadbalancer.server.port=3000"
+        
+        # === NOVAS LABELS PARA WEBSOCKET ===
+        # Timeout maior para conexoes WebSocket de longa duracao
+        - "traefik.http.services.browserless.loadbalancer.server.scheme=http"
+        - "traefik.http.services.browserless.loadbalancer.passHostHeader=true"
+        
+        # Sticky sessions para manter conexao no mesmo container
+        - "traefik.http.services.browserless.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.browserless.loadbalancer.sticky.cookie.name=browserless_affinity"
 
-// Corrigir a URL do WebSocket para usar o hostname publico
-// O Browserless retorna algo como: /devtools/inspector.html?ws=0.0.0.0:3000/devtools/page/XXX
-// Precisamos substituir 0.0.0.0:3000 pelo hostname publico
-
-let correctedDevtoolsPath = devtoolsPath;
-
-// Substituir enderecos internos pelo hostname publico
-correctedDevtoolsPath = correctedDevtoolsPath
-  .replace(/ws=0\.0\.0\.0:\d+/g, `ws=${cleanBrowserlessUrl}`)
-  .replace(/ws=localhost:\d+/g, `ws=${cleanBrowserlessUrl}`)
-  .replace(/wss=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
-  .replace(/wss=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`);
-
-// Construir URL completa
-let liveUrl = `https://${cleanBrowserlessUrl}${correctedDevtoolsPath}`;
+networks:
+  Deltanet:
+    external: true
 ```
 
 ---
 
-## Exemplo de Correcao
+## Alternativa: Testar Conexao Direta (Debug)
 
-Antes:
-```
-/devtools/inspector.html?ws=0.0.0.0:3000/devtools/page/6C5F189340285A26A12F92B0F45F6CB2
-```
+Se após adicionar as labels o problema persistir, podemos testar acessando o Browserless diretamente (sem Traefik) para confirmar que o problema é do proxy:
 
-Depois:
-```
-/devtools/inspector.html?ws=browserless.apvsiguatemi.net/devtools/page/6C5F189340285A26A12F92B0F45F6CB2
+1. Expor temporariamente a porta do Browserless no host:
+```yaml
+ports:
+  - "3001:3000"
 ```
 
-URL final:
+2. Testar acessando:
 ```
-https://browserless.apvsiguatemi.net/devtools/inspector.html?ws=browserless.apvsiguatemi.net/devtools/page/6C5F189340285A26A12F92B0F45F6CB2&token=DefinaUmaSenhaForteAqui123
+http://SEU_IP:3001/sessions?token=DefinaUmaSenhaForteAqui123
 ```
 
 ---
 
-## Tambem Corrigir em execute-automation
+## Passos para Aplicar
 
-O mesmo problema existe na Edge Function `execute-automation/index.ts` para o Live Preview. Aplicar a mesma correcao la.
+| Passo | Acao | Descricao |
+|-------|------|-----------|
+| 1 | Editar docker-compose.yml | Adicionar labels de WebSocket e ENABLE_DEBUGGER |
+| 2 | Redeploy do stack | `docker stack deploy -c docker-compose.yml browserless` |
+| 3 | Aguardar 30 segundos | Esperar o servico reiniciar |
+| 4 | Testar gravacao | Clicar em "Gravar Automacao" na aplicacao |
 
 ---
 
-## Ordem de Implementacao
+## Verificacao de Logs
 
-| Passo | Arquivo | Descricao |
-|-------|---------|-----------|
-| 1 | `start-recording-session/index.ts` | Corrigir URL do DevTools |
-| 2 | `execute-automation/index.ts` | Aplicar mesma correcao no Live Preview |
-| 3 | Deploy das Edge Functions | Testar o fluxo completo |
+Apos aplicar as mudancas, se ainda houver problemas, verifique os logs do Traefik:
+
+```bash
+docker service logs traefik_traefik -f --tail 100
+```
+
+Procure por erros relacionados a WebSocket ou conexoes rejeitadas.
 
 ---
 
 ## Resultado Esperado
 
-1. Usuario clica em "Gravar Automacao"
-2. Edge Function inicia sessao e corrige a URL do DevTools
-3. Frontend recebe URL com hostname publico correto
-4. DevTools abre e mostra a pagina do ERP (sem tela em branco!)
-5. Usuario pode interagir com a pagina
+1. Traefik passa corretamente os headers de WebSocket
+2. Chrome DevTools consegue conectar via wss://
+3. Tela mostra a pagina do ERP carregada
+4. Usuario pode interagir com a sessao remota
