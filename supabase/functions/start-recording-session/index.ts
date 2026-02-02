@@ -138,11 +138,18 @@ serve(async (req: Request) => {
     console.log(`[start-recording] Found session:`, currentSession.browserId);
 
     // Build the DevTools URL for live viewing
-    // The devtoolsFrontendUrl is like: /devtools/inspector.html?wss=host/devtools/page/PAGE_ID
-    const devtoolsPath = currentSession.devtoolsFrontendUrl;
+    // The devtoolsFrontendUrl is like: /devtools/inspector.html?ws=0.0.0.0:3000/devtools/page/PAGE_ID
+    // We need to replace the internal Docker address with the public hostname
+    let devtoolsPath = currentSession.devtoolsFrontendUrl;
+    
+    // Replace internal addresses (0.0.0.0:PORT, localhost:PORT) with public hostname
+    devtoolsPath = devtoolsPath
+      .replace(/ws=0\.0\.0\.0:\d+/g, `ws=${cleanBrowserlessUrl}`)
+      .replace(/ws=localhost:\d+/g, `ws=${cleanBrowserlessUrl}`)
+      .replace(/wss=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
+      .replace(/wss=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`);
     
     // Construct the full URL
-    // Add token if needed
     let liveUrl = `https://${cleanBrowserlessUrl}${devtoolsPath}`;
     if (browserlessToken) {
       // Add token to the URL if not already present
