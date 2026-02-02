@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import puppeteer from "https://deno.land/x/puppeteer@16.2.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,13 @@ interface AutomationStep {
 interface ExecuteRequest {
   automationId: string;
   withLivePreview?: boolean;
+}
+
+interface BrowserlessSession {
+  browserId: string;
+  devtoolsFrontendUrl: string;
+  port?: number;
+  url?: string;
 }
 
 serve(async (req: Request) => {
@@ -97,12 +105,6 @@ serve(async (req: Request) => {
 
     const executionId = executionLog?.id;
 
-    // Build the Browserless API request
-    // For live preview, we use the /live endpoint which returns a viewer URL
-    // For regular execution, we use the /function endpoint
-
-    let liveUrl: string | null = null;
-    
     // Clean the browserless URL (remove protocol if present)
     const cleanBrowserlessUrl = browserlessUrl
       .replace('https://', '')
@@ -110,51 +112,64 @@ serve(async (req: Request) => {
       .replace('wss://', '')
       .replace('ws://', '');
 
+    let liveUrl: string | null = null;
+
     if (withLivePreview) {
-      // For live preview, we need to use the Browserless /live API
-      // This returns a URL that can be embedded in an iframe
-      
-      // Build the websocket URL for puppeteer connection
-      const wsEndpoint = browserlessToken 
-        ? `wss://${cleanBrowserlessUrl}?token=${browserlessToken}`
-        : `wss://${cleanBrowserlessUrl}`;
-      
-      // The live viewer URL format for Browserless v2
-      const viewerUrl = browserlessToken
-        ? `https://${cleanBrowserlessUrl}/live?token=${browserlessToken}`
-        : `https://${cleanBrowserlessUrl}/live`;
-      
-      liveUrl = viewerUrl;
-      
-      console.log(`[execute-automation] Live preview URL: ${liveUrl}`);
-    }
+      // For live preview, we'll connect via puppeteer and then fetch the DevTools URL
+      console.log(`[execute-automation] Setting up live preview...`);
 
-    // Build the script to execute on Browserless
-    const puppeteerScript = buildPuppeteerScript(steps, automation.erp_url, credentials);
+      // Build WebSocket URL for puppeteer connection
+      const wsEndpoint = browserlessToken
+        ? `wss://${cleanBrowserlessUrl}?token=${browserlessToken}&headless=false`
+        : `wss://${cleanBrowserlessUrl}?headless=false`;
 
-    // Use Browserless /function API to execute the script
-    const browserlessApiUrl = browserlessToken
-      ? `https://${cleanBrowserlessUrl}/function?token=${browserlessToken}`
-      : `https://${cleanBrowserlessUrl}/function`;
-
-    console.log(`[execute-automation] Calling Browserless API: ${browserlessApiUrl}`);
-
-    // If live preview, return immediately with the live URL
-    // The execution will continue in background
-    if (withLivePreview && liveUrl) {
-      // Start execution in background (fire and forget)
-      executeBrowserless(
-        browserlessApiUrl,
-        puppeteerScript,
+      // We'll start execution and return the live URL
+      // The execution happens in background
+      executeBrowserlessWithPuppeteer(
+        cleanBrowserlessUrl,
+        browserlessToken,
+        steps,
+        automation.erp_url,
+        credentials,
         supabase,
         executionId,
         automationId,
-        steps.length,
         automation.webhook_url,
-        automation.webhook_secret
-      ).catch(err => {
+        automation.webhook_secret,
+        true // withLivePreview
+      ).then(async (result) => {
+        console.log(`[execute-automation] Background execution completed:`, result.success);
+      }).catch(err => {
         console.error('[execute-automation] Background execution error:', err);
       });
+
+      // Query sessions to get devtoolsFrontendUrl for the live preview
+      // First, wait a bit for the browser to start
+      await new Promise(r => setTimeout(r, 2000));
+
+      const sessionsUrl = browserlessToken
+        ? `https://${cleanBrowserlessUrl}/sessions?token=${browserlessToken}`
+        : `https://${cleanBrowserlessUrl}/sessions`;
+
+      try {
+        const sessionsResponse = await fetch(sessionsUrl);
+        if (sessionsResponse.ok) {
+          const sessions: BrowserlessSession[] = await sessionsResponse.json();
+          if (sessions.length > 0) {
+            const session = sessions[0];
+            liveUrl = `https://${cleanBrowserlessUrl}${session.devtoolsFrontendUrl}`;
+            if (browserlessToken) {
+              liveUrl = liveUrl.includes('?')
+                ? `${liveUrl}&token=${browserlessToken}`
+                : `${liveUrl}?token=${browserlessToken}`;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[execute-automation] Failed to get live URL:', e);
+      }
+
+      console.log(`[execute-automation] Live preview URL: ${liveUrl}`);
 
       return new Response(
         JSON.stringify({
@@ -167,16 +182,19 @@ serve(async (req: Request) => {
       );
     }
 
-    // Regular execution (blocking)
-    const result = await executeBrowserless(
-      browserlessApiUrl,
-      puppeteerScript,
+    // Regular execution (blocking) using Puppeteer
+    const result = await executeBrowserlessWithPuppeteer(
+      cleanBrowserlessUrl,
+      browserlessToken,
+      steps,
+      automation.erp_url,
+      credentials,
       supabase,
       executionId,
       automationId,
-      steps.length,
       automation.webhook_url,
-      automation.webhook_secret
+      automation.webhook_secret,
+      false
     );
 
     return new Response(
@@ -201,115 +219,18 @@ serve(async (req: Request) => {
   }
 });
 
-function buildPuppeteerScript(
-  steps: AutomationStep[], 
-  erpUrl: string, 
-  credentials: { username?: string; password?: string } | null
-): string {
-  // Build a Browserless-compatible function script
-  const stepsJson = JSON.stringify(steps);
-  const credentialsJson = JSON.stringify(credentials);
-  
-  return `
-module.exports = async ({ page }) => {
-  const steps = ${stepsJson};
-  const credentials = ${credentialsJson};
-  const results = {
-    stepsCompleted: 0,
-    screenshots: [],
-    extractedData: {},
-    errors: []
-  };
-
-  try {
-    // Navigate to ERP URL first
-    await page.goto('${erpUrl}', { waitUntil: 'networkidle2', timeout: 30000 });
-    console.log('Navigated to ERP URL');
-
-    for (const step of steps) {
-      try {
-        console.log('Executing step:', step.order, step.action, step.description);
-        
-        switch (step.action) {
-          case 'navigate':
-            await page.goto(step.value, { waitUntil: 'networkidle2', timeout: 30000 });
-            break;
-            
-          case 'click':
-            await page.waitForSelector(step.selector, { timeout: 10000 });
-            await page.click(step.selector);
-            break;
-            
-          case 'type':
-            await page.waitForSelector(step.selector, { timeout: 10000 });
-            let valueToType = step.value;
-            // Replace credential placeholders
-            if (credentials) {
-              if (valueToType === '{{username}}') valueToType = credentials.username || '';
-              if (valueToType === '{{password}}') valueToType = credentials.password || '';
-            }
-            await page.type(step.selector, valueToType, { delay: 50 });
-            break;
-            
-          case 'wait':
-            await new Promise(r => setTimeout(r, step.waitTime || 1000));
-            break;
-            
-          case 'waitForSelector':
-            await page.waitForSelector(step.selector, { timeout: step.waitTime || 10000 });
-            break;
-            
-          case 'screenshot':
-            const screenshot = await page.screenshot({ encoding: 'base64' });
-            results.screenshots.push(screenshot);
-            break;
-            
-          case 'extractTable':
-            const tableData = await page.evaluate((selector) => {
-              const table = document.querySelector(selector);
-              if (!table) return null;
-              
-              const rows = Array.from(table.querySelectorAll('tr'));
-              return rows.map(row => {
-                const cells = Array.from(row.querySelectorAll('td, th'));
-                return cells.map(cell => cell.textContent?.trim() || '');
-              });
-            }, step.selector);
-            results.extractedData[step.description || 'table_' + step.order] = tableData;
-            break;
-        }
-        
-        results.stepsCompleted++;
-        console.log('Step completed:', step.order);
-        
-        // Small delay between steps for stability
-        await new Promise(r => setTimeout(r, 300));
-        
-      } catch (stepError) {
-        console.error('Step error:', step.order, stepError.message);
-        results.errors.push({ step: step.order, error: stepError.message });
-        // Continue with next step even if one fails
-      }
-    }
-  } catch (error) {
-    console.error('Execution error:', error.message);
-    results.errors.push({ step: 0, error: error.message });
-  }
-
-  return { data: results, type: 'application/json' };
-};
-`;
-}
-
-async function executeBrowserless(
-  apiUrl: string,
-  script: string,
+async function executeBrowserlessWithPuppeteer(
+  cleanBrowserlessUrl: string,
+  browserlessToken: string,
+  steps: AutomationStep[],
+  erpUrl: string,
+  credentials: { username?: string; password?: string } | null,
   supabase: any,
   executionId: string | undefined,
   automationId: string,
-  totalSteps: number,
   webhookUrl?: string | null,
-  webhookSecret?: string | null
+  webhookSecret?: string | null,
+  withLivePreview: boolean = false
 ): Promise<{
   success: boolean;
   stepsCompleted: number;
@@ -317,34 +238,108 @@ async function executeBrowserless(
   screenshots: string[];
   error?: string;
 }> {
+  let browser: any = null;
+
   try {
-    console.log('[execute-automation] Sending request to Browserless...');
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/javascript',
-      },
-      body: script,
+    console.log('[execute-automation] Connecting to Browserless via Puppeteer...');
+
+    // Build WebSocket URL
+    const wsEndpoint = browserlessToken
+      ? `wss://${cleanBrowserlessUrl}?token=${browserlessToken}${withLivePreview ? '&headless=false' : ''}`
+      : `wss://${cleanBrowserlessUrl}${withLivePreview ? '?headless=false' : ''}`;
+
+    browser = await puppeteer.connect({
+      browserWSEndpoint: wsEndpoint,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[execute-automation] Browserless API error:', errorText);
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+
+    const results = {
+      stepsCompleted: 0,
+      screenshots: [] as string[],
+      extractedData: {} as Record<string, unknown>,
+      errors: [] as { step: number; error: string }[],
+    };
+
+    // Navigate to ERP URL first
+    console.log(`[execute-automation] Navigating to: ${erpUrl}`);
+    await page.goto(erpUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+    // Execute each step
+    for (const step of steps) {
+      try {
+        console.log(`[execute-automation] Executing step ${step.order}: ${step.action} - ${step.description}`);
+
+        switch (step.action) {
+          case 'navigate':
+            await page.goto(step.value!, { waitUntil: 'networkidle2', timeout: 30000 });
+            break;
+
+          case 'click':
+            await page.waitForSelector(step.selector!, { timeout: 10000 });
+            await page.click(step.selector!);
+            break;
+
+          case 'type':
+            await page.waitForSelector(step.selector!, { timeout: 10000 });
+            let valueToType = step.value || '';
+            // Replace credential placeholders
+            if (credentials) {
+              if (valueToType === '{{username}}') valueToType = credentials.username || '';
+              if (valueToType === '{{password}}') valueToType = credentials.password || '';
+            }
+            await page.type(step.selector!, valueToType, { delay: 50 });
+            break;
+
+          case 'wait':
+            await new Promise(r => setTimeout(r, step.waitTime || 1000));
+            break;
+
+          case 'waitForSelector':
+            await page.waitForSelector(step.selector!, { timeout: step.waitTime || 10000 });
+            break;
+
+          case 'screenshot':
+            const screenshot = await page.screenshot({ encoding: 'base64' });
+            results.screenshots.push(screenshot);
+            break;
+
+          case 'extractTable':
+            const tableData = await page.evaluate((selector: string) => {
+              const table = (globalThis as any).document.querySelector(selector);
+              if (!table) return null;
+
+              const rows = Array.from(table.querySelectorAll('tr'));
+              return rows.map((row: any) => {
+                const cells = Array.from(row.querySelectorAll('td, th'));
+                return cells.map((cell: any) => cell.textContent?.trim() || '');
+              });
+            }, step.selector!);
+            results.extractedData[step.description || 'table_' + step.order] = tableData;
+            break;
+        }
+
+        results.stepsCompleted++;
+        console.log(`[execute-automation] Step ${step.order} completed`);
+
+        // Small delay between steps for stability
+        await new Promise(r => setTimeout(r, 300));
+
+      } catch (stepError) {
+        const errorMsg = stepError instanceof Error ? stepError.message : 'Unknown error';
+        console.error(`[execute-automation] Step ${step.order} error:`, errorMsg);
+        results.errors.push({ step: step.order, error: errorMsg });
+        // Continue with next step even if one fails
+      }
     }
 
-    const result = await response.json();
-    console.log('[execute-automation] Browserless response:', JSON.stringify(result).substring(0, 500));
+    // Close browser
+    await browser.close();
+    browser = null;
 
-    const data = result.data || result;
-    const stepsCompleted = data.stepsCompleted || 0;
-    const extractedData = data.extractedData || {};
-    const screenshots = data.screenshots || [];
-    const errors = data.errors || [];
-
-    const success = errors.length === 0 || stepsCompleted === totalSteps;
-    const errorMessage = errors.length > 0 ? errors.map((e: any) => e.error).join('; ') : undefined;
+    const success = results.errors.length === 0 || results.stepsCompleted === steps.length;
+    const errorMessage = results.errors.length > 0 ? results.errors.map(e => e.error).join('; ') : undefined;
 
     // Update execution log
     if (executionId) {
@@ -353,9 +348,9 @@ async function executeBrowserless(
         .update({
           finished_at: new Date().toISOString(),
           status: success ? 'success' : 'failed',
-          steps_completed: stepsCompleted,
-          screenshots,
-          extracted_data: extractedData,
+          steps_completed: results.stepsCompleted,
+          screenshots: results.screenshots,
+          extracted_data: results.extractedData,
           error_message: errorMessage,
         })
         .eq('id', executionId);
@@ -377,9 +372,9 @@ async function executeBrowserless(
           automationId,
           executionId,
           status: success ? 'success' : 'failed',
-          stepsCompleted,
-          totalSteps,
-          extractedData,
+          stepsCompleted: results.stepsCompleted,
+          totalSteps: steps.length,
+          extractedData: results.extractedData,
           timestamp: new Date().toISOString(),
         };
 
@@ -417,15 +412,24 @@ async function executeBrowserless(
 
     return {
       success,
-      stepsCompleted,
-      extractedData,
-      screenshots,
+      stepsCompleted: results.stepsCompleted,
+      extractedData: results.extractedData,
+      screenshots: results.screenshots,
       error: errorMessage,
     };
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[execute-automation] Execution failed:', error);
+
+    // Close browser on error
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('[execute-automation] Error closing browser:', closeError);
+      }
+    }
 
     // Update logs on failure
     if (executionId) {

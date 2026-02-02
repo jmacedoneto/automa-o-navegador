@@ -229,10 +229,14 @@ export function RecordingModal({ isOpen, onClose, onStepsGenerated }: RecordingM
             <div className="bg-muted/50 rounded-lg p-4 space-y-3">
               <h4 className="font-medium">Como gravar:</h4>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                <li>Clique no botão abaixo para abrir o navegador</li>
+                <li>Clique no botão abaixo para abrir o Chrome DevTools</li>
+                <li>No DevTools, você verá a página do ERP carregada</li>
                 <li>Faça as ações que deseja automatizar (cliques, digitação, navegação)</li>
                 <li>Quando terminar, volte aqui e clique em "Finalizar"</li>
               </ol>
+              <p className="text-xs text-muted-foreground italic">
+                Nota: O DevTools abrirá em uma nova janela para permitir interação com o navegador remoto.
+              </p>
             </div>
 
             {/* Open browser button */}
@@ -242,7 +246,7 @@ export function RecordingModal({ isOpen, onClose, onStepsGenerated }: RecordingM
               className="w-full gap-2"
             >
               <ExternalLink className="h-4 w-4" />
-              Abrir Navegador Remoto
+              Abrir Chrome DevTools
             </Button>
 
             {/* Actions counter */}

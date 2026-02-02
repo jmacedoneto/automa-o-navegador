@@ -236,15 +236,15 @@ export function LivePreviewModal({
                   <>
                     <AlertCircle className="h-12 w-12 text-warning mx-auto" />
                     <div>
-                      <h3 className="font-medium text-lg">Visualização inline não disponível</h3>
+                      <h3 className="font-medium text-lg">Visualização via Chrome DevTools</h3>
                       <p className="text-muted-foreground text-sm mt-1">
-                        O Browserless não permite exibição em iframe por questões de segurança.
+                        Por questões de segurança, a visualização é feita através do Chrome DevTools.
                         Clique abaixo para abrir em uma nova janela.
                       </p>
                     </div>
                     <Button onClick={handleOpenNewWindow} className="gap-2">
                       <ExternalLink className="h-4 w-4" />
-                      Abrir em Nova Janela
+                      Abrir Chrome DevTools
                     </Button>
                   </>
                 )}
