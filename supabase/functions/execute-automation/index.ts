@@ -157,7 +157,14 @@ serve(async (req: Request) => {
           const sessions: BrowserlessSession[] = await sessionsResponse.json();
           if (sessions.length > 0) {
             const session = sessions[0];
-            liveUrl = `https://${cleanBrowserlessUrl}${session.devtoolsFrontendUrl}`;
+            // Replace internal Docker addresses with public hostname
+            let devtoolsPath = session.devtoolsFrontendUrl
+              .replace(/ws=0\.0\.0\.0:\d+/g, `ws=${cleanBrowserlessUrl}`)
+              .replace(/ws=localhost:\d+/g, `ws=${cleanBrowserlessUrl}`)
+              .replace(/wss=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
+              .replace(/wss=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`);
+            
+            liveUrl = `https://${cleanBrowserlessUrl}${devtoolsPath}`;
             if (browserlessToken) {
               liveUrl = liveUrl.includes('?')
                 ? `${liveUrl}&token=${browserlessToken}`
