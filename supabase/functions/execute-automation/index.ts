@@ -158,9 +158,10 @@ serve(async (req: Request) => {
           if (sessions.length > 0) {
             const session = sessions[0];
             // Replace internal Docker addresses with public hostname
+            // Use wss:// since connection goes through HTTPS/TLS (Traefik)
             let devtoolsPath = session.devtoolsFrontendUrl
-              .replace(/ws=0\.0\.0\.0:\d+/g, `ws=${cleanBrowserlessUrl}`)
-              .replace(/ws=localhost:\d+/g, `ws=${cleanBrowserlessUrl}`)
+              .replace(/ws=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
+              .replace(/ws=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`)
               .replace(/wss=0\.0\.0\.0:\d+/g, `wss=${cleanBrowserlessUrl}`)
               .replace(/wss=localhost:\d+/g, `wss=${cleanBrowserlessUrl}`);
             
