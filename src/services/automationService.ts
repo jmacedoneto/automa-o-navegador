@@ -182,9 +182,19 @@ export async function fetchExecutionLogs(automationId: string, limit = 20): Prom
 
 // ============ GENERATE STEPS ============
 
-export async function generateSteps(instructions: string, erpUrl?: string): Promise<{ steps: AutomationStep[]; notes: string }> {
+interface MediaInput {
+  type: 'audio' | 'image' | 'video';
+  url: string;
+  name: string;
+}
+
+export async function generateSteps(
+  instructions: string, 
+  erpUrl?: string,
+  mediaFiles?: MediaInput[]
+): Promise<{ steps: AutomationStep[]; notes: string }> {
   const { data, error } = await supabase.functions.invoke('generate-steps', {
-    body: { instructions, erpUrl }
+    body: { instructions, erpUrl, mediaFiles }
   });
 
   if (error) throw error;
