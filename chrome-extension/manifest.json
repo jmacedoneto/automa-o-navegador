@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "AutoPilot ERP - Gravador de Passos",
+  "version": "1.0",
+  "description": "Grave cliques e digitações no navegador para exportar um json de automação",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "\u003Call_urls\u003E"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gravar Passos"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["\u003Call_urls\u003E"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AutoPilot Gravador</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; width: 280px; padding: 15px; background: #0f172a; color: #f8fafc; margin: 0; }
+        h3 { margin-top: 0; font-size: 16px; font-weight: 500; border-bottom: 1px solid #1e293b; padding-bottom: 10px; color: #e2e8f0; }
+        .btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: all 0.2s; }
+        .btn-start { background-color: #8b5cf6; color: white; }
+        .btn-start:hover { background-color: #7c3aed; }
+        .btn-stop { background-color: #ef4444; color: white; display: none; }
+        .btn-stop:hover { background-color: #dc2626; }
+        .btn-export { background-color: #10b981; color: white; display: none; }
+        .btn-export:hover { background-color: #059669; }
+        .status-container { margin-bottom: 15px; text-align: center; }
+        .status-text { font-size: 14px; font-weight: 500; }
+        .status-text.idle { color: #94a3b8; }
+        .status-text.recording { color: #ef4444; animation: blink 1.5s infinite; }
+        .step-count { font-size: 12px; color: #94a3b8; margin-top: 5px; text-align: center; }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <h3>AutoPilot - Gravador</h3>
+    
+    <div class="status-container">
+        <span id="statusText" class="status-text idle">Pronto para gravar</span>
+    </div>
+
+    <button id="startBtn" class="btn btn-start">Iniciar Gravação</button>
+    <button id="stopBtn" class="btn btn-stop">Parar Gravação</button>
+    <button id="exportBtn" class="btn btn-export">Exportar JSON</button>
+
+    <div class="step-count">
+        Passos gravados: <span id="stepCount">0</span>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
