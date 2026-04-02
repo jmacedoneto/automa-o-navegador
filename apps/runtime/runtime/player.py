@@ -1,6 +1,12 @@
-def build_run_summary(steps_completed: int, total_steps: int, status: str) -> dict:
+from typing import Literal
+
+
+RunStatus = Literal["queued", "running", "paused", "success", "failed"]
+
+
+def build_run_summary(steps_completed: int, total_steps: int, status: RunStatus) -> dict:
     return {
-        "steps_completed": steps_completed,
-        "total_steps": total_steps,
+        "stepsCompleted": steps_completed,
+        "totalSteps": total_steps,
         "status": status,
     }
