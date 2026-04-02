@@ -2,50 +2,16 @@ import type { AutomationMode, FallbackPolicy } from "@autopilot/shared";
 
 export interface AutomationStep {
   order: number;
-  type?: string;  // FastAPI uses 'type'
-  action?: string; // Legacy extension uses 'action'
+  action: "navigate" | "click" | "type" | "wait" | "waitForSelector" | "screenshot" | "extractTable";
   selector?: string;
-  url?: string;
   value?: string;
-  description?: string;
+  description: string;
   waitTime?: number;
-  duration?: number;
-  key?: string;
-  full_page?: boolean;
 }
 
-export type ScheduleType = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval' | 'cron';
-export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
-export type MediaType = 'image' | 'audio' | 'video';
-
-// ── Output configs ─────────────────────────────────────────────────────────
-
-export interface WebhookOutput {
-  type: 'webhook';
-  url: string;
-  method?: string;
-  headers?: Record<string, string>;
-}
-
-export interface WhatsAppOutput {
-  type: 'whatsapp';
-  provider?: 'evolution';
-  api_url: string;
-  api_key: string;
-  instance: string;
-  to: string;
-  message?: string;
-}
-
-export interface SheetsOutput {
-  type: 'sheets';
-  spreadsheet_id: string;
-  sheet?: string;
-}
-
-export type AutomationOutput = WebhookOutput | WhatsAppOutput | SheetsOutput;
-
-// ── Main types ─────────────────────────────────────────────────────────────
+export type ScheduleType = "once" | "daily" | "weekly" | "monthly" | "interval";
+export type ExecutionStatus = "pending" | "running" | "success" | "failed" | "cancelled";
+export type MediaType = "image" | "audio" | "video";
 
 export interface Schedule {
   id: string;
@@ -60,6 +26,7 @@ export interface Schedule {
   next_run_at?: string;
   last_run_at?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ExecutionLog {
@@ -74,6 +41,8 @@ export interface ExecutionLog {
   total_steps: number;
   screenshots: string[];
   extracted_data: Record<string, unknown>;
+  webhook_response?: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface MediaUpload {
@@ -83,25 +52,35 @@ export interface MediaUpload {
   file_url: string;
   file_name?: string;
   file_size?: number;
+  transcription?: string;
+  analysis?: Record<string, unknown>;
   created_at: string;
 }
 
 export interface Automation {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
   erp_url: string;
+  browserless_url: string;
+  sheets_url: string;
   instructions: string;
   mode: AutomationMode;
   fallback_policy: FallbackPolicy;
   steps: AutomationStep[];
   is_active: boolean;
-  credentials?: Record<string, string>;
-  outputs: AutomationOutput[];
+  webhook_url?: string;
+  webhook_secret?: string;
+  credentials?: {
+    username?: string;
+    password?: string;
+  };
   last_execution_at?: string;
   last_execution_status?: ExecutionStatus;
   created_at: string;
   updated_at: string;
+  schedules?: Schedule[];
+  execution_logs?: ExecutionLog[];
 }
 
 export interface GenerateStepsResponse {
@@ -111,9 +90,8 @@ export interface GenerateStepsResponse {
 
 export interface ExecutionSession {
   executionId: string;
-  task_id?: string;
-  status: 'starting' | 'running' | 'completed' | 'success' | 'failed' | 'queued';
+  liveUrl?: string;
+  status: "starting" | "running" | "completed" | "success" | "failed";
   currentStep: number;
   totalSteps: number;
-  latestScreenshot?: string;
 }
