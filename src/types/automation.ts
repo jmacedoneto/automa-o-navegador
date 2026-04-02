@@ -2,16 +2,16 @@ import type { AutomationMode, FallbackPolicy } from "@autopilot/shared";
 
 export interface AutomationStep {
   order: number;
-  action: "navigate" | "click" | "type" | "wait" | "waitForSelector" | "screenshot" | "extractTable";
+  action: 'navigate' | 'click' | 'type' | 'wait' | 'waitForSelector' | 'screenshot' | 'extractTable';
   selector?: string;
   value?: string;
   description: string;
   waitTime?: number;
 }
 
-export type ScheduleType = "once" | "daily" | "weekly" | "monthly" | "interval";
-export type ExecutionStatus = "pending" | "running" | "success" | "failed" | "cancelled";
-export type MediaType = "image" | "audio" | "video";
+export type ScheduleType = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval';
+export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+export type MediaType = 'image' | 'audio' | 'video';
 
 export interface Schedule {
   id: string;
@@ -79,6 +79,7 @@ export interface Automation {
   last_execution_status?: ExecutionStatus;
   created_at: string;
   updated_at: string;
+  // Relations
   schedules?: Schedule[];
   execution_logs?: ExecutionLog[];
 }
@@ -91,7 +92,7 @@ export interface GenerateStepsResponse {
 export interface ExecutionSession {
   executionId: string;
   liveUrl?: string;
-  status: "starting" | "running" | "completed" | "success" | "failed";
+  status: 'starting' | 'running' | 'completed' | 'success' | 'failed';
   currentStep: number;
   totalSteps: number;
 }
