@@ -8,5 +8,8 @@
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }
