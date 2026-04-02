@@ -175,6 +175,8 @@ _GET_ELEMENT_JS = """
 @router.websocket("/ws")
 async def recording_ws(websocket: WebSocket):
     await websocket.accept()
+    session_payload = create_recording_payload(websocket.query_params.get("automation_id"))
+    logger.info("legacy recording session started", extra=session_payload)
 
     browserless_url = (settings.BROWSERLESS_URL or "").rstrip("/")
     if not browserless_url:
@@ -191,7 +193,6 @@ async def recording_ws(websocket: WebSocket):
         cdp_url = f"{cdp_url}?token={settings.BROWSERLESS_TOKEN}"
 
     steps: list[dict] = []
-    session_payload = create_recording_payload(None)
 
     async def send(msg: dict):
         await websocket.send_json(msg)
