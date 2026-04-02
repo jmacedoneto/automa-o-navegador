@@ -9,6 +9,9 @@
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@autopilot/shared": "0.1.0"
+  },
   "devDependencies": {
     "vitest": "^2.1.9"
   }

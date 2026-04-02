@@ -62,11 +62,11 @@ export interface Automation {
   name: string;
   description: string | null;
   erp_url: string;
-  browserless_url: string;
-  sheets_url: string;
+  browserless_url?: string;
+  sheets_url?: string;
   instructions: string;
-  mode: AutomationMode;
-  fallback_policy: FallbackPolicy;
+  mode?: AutomationMode;
+  fallback_policy?: FallbackPolicy;
   steps: AutomationStep[];
   is_active: boolean;
   webhook_url?: string;
