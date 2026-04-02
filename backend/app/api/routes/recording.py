@@ -230,12 +230,11 @@ async def recording_ws(websocket: WebSocket):
             page = await browser.new_page()
             await page.set_viewport_size({"width": VIEWPORT_W, "height": VIEWPORT_H})
             await page.add_init_script(_INIT_SCRIPT)
+            await page.add_init_script(
+                f"window.__autopilotRecordingSession = {json.dumps(session_payload)};"
+            )
 
-            await send({
-                "type": "ready",
-                "viewport": {"w": VIEWPORT_W, "h": VIEWPORT_H},
-                "recording": session_payload,
-            })
+            await send({"type": "ready", "viewport": {"w": VIEWPORT_W, "h": VIEWPORT_H}})
             await push_screenshot(page)
 
             while True:
@@ -469,7 +468,7 @@ async def recording_ws(websocket: WebSocket):
 
                 # ── Stop & return steps ──────────────────────────────────────
                 elif cmd == "stop":
-                    await send({"type": "steps", "steps": steps, "recording": session_payload})
+                    await send({"type": "steps", "steps": steps})
                     break
 
             await browser.close()
