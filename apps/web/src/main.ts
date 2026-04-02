@@ -1,16 +1,21 @@
-export function createAppMarkup() {
-  return `
-    <main style="font-family: system-ui, sans-serif; padding: 2rem;">
-      <h1>Autopilot Platform</h1>
-      <p>The workspace shell is ready.</p>
-    </main>
-  `;
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+
+import { createAppRouter } from "./app/router";
+
+export function createAppRoot() {
+  return createElement(RouterProvider, { router: createAppRouter() });
 }
 
-export function mountApp(root: HTMLElement | null) {
-  if (root) {
-    root.innerHTML = createAppMarkup();
+export function mountApp(rootElement: HTMLElement | null) {
+  if (!rootElement) {
+    return null;
   }
+
+  const root = createRoot(rootElement);
+  root.render(createAppRoot());
+  return root;
 }
 
 if (typeof document !== "undefined") {

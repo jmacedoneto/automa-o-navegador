@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createAppMarkup } from "./main";
+import { routes } from "./app/router";
 
-describe("createAppMarkup", () => {
-  it("returns the workspace shell content", () => {
-    expect(createAppMarkup()).toContain("Autopilot Platform");
+describe("routes", () => {
+  it("registers the task 5 route shells", () => {
+    expect(routes.map((route) => route.path)).toEqual([
+      "/automations/:id",
+      "/recordings/:id",
+      "/runs",
+    ]);
   });
 });
