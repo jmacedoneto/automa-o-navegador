@@ -31,9 +31,10 @@ async def execute(automation_id: str, payload: ExecuteRequest):
         mode="hibrido",
         incoming_payload=payload.variables,
     )
+    db.table("execution_jobs").insert(queue_payload).execute()
 
     task = run_automation.delay(queue_payload["automation_id"], queue_payload["payload"], log_id)
-    return {"task_id": task.id, "status": "queued", "execution_id": log_id}
+    return {"task_id": task.id, "status": queue_payload["status"], "execution_id": log_id}
 
 
 @router.get("", response_model=list[ExecutionLogResponse])

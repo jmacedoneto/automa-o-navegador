@@ -34,7 +34,7 @@ from playwright.async_api import async_playwright
 logger = logging.getLogger("recording")
 
 from app.core.config import settings
-from app.core.database import get_setting
+from app.core.database import get_db, get_setting
 from app.core.model_config import normalize_openai_model
 from app.services.computer_agent import run_agent
 from apps.api.app.services.recording_service import create_recording_payload
@@ -176,9 +176,11 @@ _GET_ELEMENT_JS = """
 async def recording_ws(websocket: WebSocket):
     await websocket.accept()
     session_payload = create_recording_payload(websocket.query_params.get("automation_id"))
+    db = get_db()
+    db.table("recording_sessions").insert(session_payload).execute()
     logger.info("legacy recording session started", extra=session_payload)
 
-    browserless_url = (settings.BROWSERLESS_URL or "").rstrip("/")
+    browserless_url = ((await get_setting("browserless_url")) or settings.BROWSERLESS_URL or "").rstrip("/")
     if not browserless_url:
         await websocket.send_json({"type": "error", "message": "Browserless URL não configurado em Configurações"})
         await websocket.close()
@@ -189,8 +191,9 @@ async def recording_ws(websocket: WebSocket):
         cdp_url = cdp_url.replace("https://", "wss://")
     elif cdp_url.startswith("http://"):
         cdp_url = cdp_url.replace("http://", "ws://")
-    if settings.BROWSERLESS_TOKEN:
-        cdp_url = f"{cdp_url}?token={settings.BROWSERLESS_TOKEN}"
+    browserless_token = ((await get_setting("browserless_token")) or settings.BROWSERLESS_TOKEN or "").strip()
+    if browserless_token:
+        cdp_url = f"{cdp_url}?token={browserless_token}"
 
     steps: list[dict] = []
 
