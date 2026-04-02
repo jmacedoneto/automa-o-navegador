@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi.testclient import TestClient
 from apps.api.main import app
 
@@ -17,5 +19,6 @@ def test_create_execution_job_returns_202():
     )
 
     assert response.status_code == 202
+    UUID(response.json()["id"])
     assert response.json()["automation_id"] == automation_id
     assert response.json()["status"] == "queued"
