@@ -1,1 +1,1 @@
-export const sharedPackageName = "@autopilot/shared";
+export * from "./contracts";
