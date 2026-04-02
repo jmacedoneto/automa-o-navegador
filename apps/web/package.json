@@ -1,0 +1,12 @@
+{
+  "name": "@autopilot/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "vitest run"
+  }
+}
