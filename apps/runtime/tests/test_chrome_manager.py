@@ -23,7 +23,7 @@ def test_launch_creates_persistent_context():
         mock_playwright.chromium.launch_persistent_context.assert_called_once()
         call_kwargs = mock_playwright.chromium.launch_persistent_context.call_args
         assert call_kwargs[0][0] == "/tmp/test-profile"
-        assert call_kwargs[1]["headless"] is True
+        assert call_kwargs[1]["headless"] is False
         assert call_kwargs[1]["viewport"] == {"width": 1280, "height": 720}
 
     asyncio.run(run())

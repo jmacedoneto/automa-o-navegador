@@ -7,7 +7,7 @@ class RuntimeSettings(BaseSettings):
     fallback_pause_when_failure: bool = True
     fallback_timeout_seconds: int = 20
     chrome_profile_dir: str = ".runtime-profile"
-    chrome_headless: bool = True
+    chrome_headless: bool = False
     chrome_viewport_width: int = 1280
     chrome_viewport_height: int = 720
     poll_interval_seconds: float = 3.0
