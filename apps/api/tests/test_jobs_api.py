@@ -36,3 +36,13 @@ def test_job_service_returns_runtime_queue_shape():
 
     assert payload["mode"] == "hibrido"
     assert payload["payload"]["lead_id"] == "1"
+
+
+def test_poll_next_job_returns_204_when_empty():
+    response = client.get("/api/jobs/next")
+    assert response.status_code == 204
+
+
+def test_ack_job_returns_200():
+    response = client.post("/api/jobs/fake-job-id/ack")
+    assert response.status_code == 200
