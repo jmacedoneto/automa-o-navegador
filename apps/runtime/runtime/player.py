@@ -10,3 +10,11 @@ def build_run_summary(steps_completed: int, total_steps: int, status: RunStatus)
         "totalSteps": total_steps,
         "status": status,
     }
+
+
+def build_delivery_payload(run_id: str, destination: str, extracted_data: dict) -> dict:
+    return {
+        "run_id": run_id,
+        "destination": destination,
+        "payload": extracted_data,
+    }
