@@ -1,0 +1,147 @@
+version: "3.8"
+
+# ============================================================
+# AutoPilot — Stack completa (self-hosted)
+#
+# DEPLOY NA VPS (via SSH):
+#   cd /opt/autopilot
+#   docker compose up --build -d
+#
+# Variáveis obrigatórias (.env ou export):
+#   SUPABASE_URL, SUPABASE_KEY
+# ============================================================
+
+x-common-env: &common-env
+  TZ: "America/Sao_Paulo"
+  NODE_ENV: "production"
+  SUPABASE_URL: "${SUPABASE_URL}"
+  SUPABASE_KEY: "${SUPABASE_KEY}"
+  REDIS_URL: "redis://autopilot_redis:6379"
+
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+
+  # ── API + Frontend (tudo em um container) ─────────────────
+  autopilot_api:
+    <<: *app-build
+    networks:
+      - Deltanet
+    environment:
+      <<: *common-env
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      BROWSERLESS_URL: "http://autopilot_browser:3000"
+      BROWSERLESS_TOKEN: "${BROWSERLESS_TOKEN:-0O6gDW0mAwx3x9BM1R2gD5g}"
+    depends_on:
+      - autopilot_redis
+      - autopilot_browser
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.autopilot_api.rule=Host(`navegador.apvsiguatemi.net`)"
+        - "traefik.http.routers.autopilot_api.entrypoints=websecure"
+        - "traefik.http.routers.autopilot_api.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.autopilot_api.loadbalancer.server.port=8000"
+
+  # ── Celery Worker ──────────────────────────────────────────
+  autopilot_worker:
+    <<: *app-build
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=4
+    networks:
+      - Deltanet
+    environment:
+      <<: *common-env
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      BROWSERLESS_URL: "http://autopilot_browser:3000"
+      BROWSERLESS_TOKEN: "${BROWSERLESS_TOKEN:-0O6gDW0mAwx3x9BM1R2gD5g}"
+    volumes:
+      - autopilot_downloads:/tmp
+    depends_on:
+      - autopilot_redis
+      - autopilot_browser
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+      restart_policy:
+        condition: any
+
+  # ── Celery Beat (scheduler) ────────────────────────────────
+  autopilot_beat:
+    <<: *app-build
+    command: celery -A app.workers.celery_app.celery beat --loglevel=info
+    networks:
+      - Deltanet
+    environment:
+      <<: *common-env
+    depends_on:
+      - autopilot_redis
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+      restart_policy:
+        condition: any
+
+  # ── Browserless (Chrome headless) ─────────────────────────
+  autopilot_browser:
+    image: browserless/chrome:latest
+    networks:
+      - Deltanet
+    environment:
+      TZ: "America/Sao_Paulo"
+      CONNECTION_TIMEOUT: "600000"
+      MAX_CONCURRENT_SESSIONS: "10"
+      ENABLE_DEBUGGER: "true"
+      PREBOOT_CHROME: "true"
+      TOKEN: "${BROWSERLESS_TOKEN:-0O6gDW0mAwx3x9BM1R2gD5g}"
+    volumes:
+      - autopilot_downloads:/downloads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+
+  # ── Redis ──────────────────────────────────────────────────
+  autopilot_redis:
+    image: redis:7-alpine
+    networks:
+      - Deltanet
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - autopilot_redis:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  autopilot_downloads:
+    driver: local
+  autopilot_redis:
+    driver: local
+
+networks:
+  Deltanet:
+    external: true
+    name: Deltanet
