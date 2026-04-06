@@ -1,9 +1,18 @@
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import ExecuteRequest, ExecutionLogResponse
 from app.core.database import get_db
-from apps.api.app.services.job_service import create_job_payload
 
 router = APIRouter(prefix="/executions", tags=["executions"])
+
+
+def _create_job_payload(automation_id: str, trigger_type: str, mode: str, incoming_payload: dict) -> dict:
+    return {
+        "automation_id": automation_id,
+        "trigger_type": trigger_type,
+        "mode": mode,
+        "payload": incoming_payload,
+        "status": "queued",
+    }
 
 
 @router.post("/automations/{automation_id}/execute", status_code=202)
@@ -26,7 +35,7 @@ async def execute(automation_id: str, payload: ExecuteRequest):
     log_id = log_res.data[0]["id"]
 
     # Create job for the runtime to pick up
-    queue_payload = create_job_payload(
+    queue_payload = _create_job_payload(
         automation_id=automation_id,
         trigger_type="manual",
         mode="hibrido",
