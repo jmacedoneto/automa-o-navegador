@@ -35,13 +35,18 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       BROWSERLESS_URL: "http://autopilot_browser:3000"
       BROWSERLESS_TOKEN: "${BROWSERLESS_TOKEN:-0O6gDW0mAwx3x9BM1R2gD5g}"
+    volumes:
+      - autopilot_downloads:/tmp
+      - /root/navegador/cotacao_pvs:/app/cotacao_pvs:ro
     depends_on:
       - autopilot_redis
       - autopilot_browser
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 4096M
+        reservations:
+          memory: 512M
       restart_policy:
         condition: any
       labels:
@@ -54,7 +59,7 @@ services:
   # ── Celery Worker ──────────────────────────────────────────
   autopilot_worker:
     <<: *app-build
-    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=4
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=2
     networks:
       - Deltanet
     environment:
@@ -64,13 +69,14 @@ services:
       BROWSERLESS_TOKEN: "${BROWSERLESS_TOKEN:-0O6gDW0mAwx3x9BM1R2gD5g}"
     volumes:
       - autopilot_downloads:/tmp
+      - /root/navegador/cotacao_pvs:/app/cotacao_pvs:ro
     depends_on:
       - autopilot_redis
       - autopilot_browser
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 3072M
       restart_policy:
         condition: any
 
@@ -114,7 +120,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2048M
+          memory: 3072M
       restart_policy:
         condition: any
         delay: 10s
