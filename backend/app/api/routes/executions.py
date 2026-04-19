@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import ExecuteRequest, ExecutionLogResponse
 from app.core.database import get_db
+from app.workers.tasks import run_automation
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
@@ -52,6 +53,17 @@ async def execute(automation_id: str, payload: ExecuteRequest):
     }).execute()
     run_id = run_res.data[0]["id"]
 
+    # Dispatch Celery task
+    run_automation.apply_async(
+        args=[automation_id],
+        kwargs={
+            "variables": payload.variables or {},
+            "log_id": log_id,
+            "job_id": job_id,
+            "run_id": run_id,
+        },
+    )
+
     return {
         "status": "queued",
         "execution_id": log_id,
@@ -95,3 +107,21 @@ async def get_execution(log_id: str):
     if not res.data:
         raise HTTPException(status_code=404, detail="Execution log not found")
     return res.data
+
+
+@router.post("/{log_id}/cancel")
+async def cancel_execution(log_id: str):
+    """Signal a running execution to stop."""
+    from datetime import datetime, timezone
+    db = get_db()
+    res = db.table("execution_logs").select("status").eq("id", log_id).maybe_single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    if res.data["status"] not in ("running", "pending"):
+        return {"ok": False, "message": "Execução não está ativa"}
+    db.table("execution_logs").update({
+        "status": "cancelled",
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "error_message": "Cancelado pelo usuário",
+    }).eq("id", log_id).execute()
+    return {"ok": True}
