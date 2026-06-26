@@ -333,6 +333,7 @@ async def execute_automation(
                         credentials=creds,
                         on_step=on_step,
                         on_screenshot=on_screenshot,
+                        browser=browser,
                     )
                     extracted_data["cotacao_result"] = loop_result
                     has_explicit_extraction = True
