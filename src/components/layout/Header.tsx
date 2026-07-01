@@ -1,17 +1,16 @@
-import { forwardRef } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Bot, Settings, LayoutDashboard, Wifi, WifiOff, History } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { getBrowserlessSettings, testBrowserlessConnection } from "@/services/settingsService";
+import { Link, useLocation } from "react-router-dom";
+import { Bot, Settings, LayoutDashboard, Wifi, WifiOff, History, LogOut, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
 
-export const Header = forwardRef<HTMLElement, object>(function Header(_props, ref) {
+export function Header() {
   const location = useLocation();
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -23,13 +22,8 @@ export const Header = forwardRef<HTMLElement, object>(function Header(_props, re
   const checkConnection = async () => {
     setIsChecking(true);
     try {
-      const settings = await getBrowserlessSettings();
-      if (settings.url) {
-        const connected = await testBrowserlessConnection(settings.url, settings.token);
-        setIsConnected(connected);
-      } else {
-        setIsConnected(null);
-      }
+      const res = await fetch("/health", { signal: AbortSignal.timeout(4000) });
+      setIsConnected(res.ok);
     } catch {
       setIsConnected(false);
     } finally {
@@ -40,7 +34,7 @@ export const Header = forwardRef<HTMLElement, object>(function Header(_props, re
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header ref={ref} className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container flex h-16 items-center justify-between">
         {/* Logo e Nome */}
         <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-80">
@@ -84,6 +78,20 @@ export const Header = forwardRef<HTMLElement, object>(function Header(_props, re
             </Link>
           </Button>
           <Button
+            variant={isActive("/cobranca") ? "secondary" : "ghost"}
+            size="sm"
+            asChild
+            className={cn(
+              "gap-2",
+              isActive("/cobranca") && "bg-primary/10 text-primary"
+            )}
+          >
+            <Link to="/cobranca">
+              <Phone className="h-4 w-4" />
+              <span className="hidden sm:inline">Cobrança</span>
+            </Link>
+          </Button>
+          <Button
             variant={isActive("/settings") ? "secondary" : "ghost"}
             size="sm"
             asChild
@@ -99,7 +107,8 @@ export const Header = forwardRef<HTMLElement, object>(function Header(_props, re
           </Button>
         </nav>
 
-        {/* Status de Conexão */}
+        {/* Status de Conexão + Logout */}
+        <div className="flex items-center gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
             <div
@@ -114,29 +123,32 @@ export const Header = forwardRef<HTMLElement, object>(function Header(_props, re
                 <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : isConnected === true ? (
                 <Wifi className="h-3 w-3" />
-              ) : isConnected === false ? (
-                <WifiOff className="h-3 w-3" />
               ) : (
                 <WifiOff className="h-3 w-3" />
               )}
               <span className="hidden md:inline">
-                {isConnected === true
-                  ? "Conectado"
-                  : isConnected === false
-                  ? "Desconectado"
-                  : "Não configurado"}
+                {isConnected === true ? "Online" : isConnected === false ? "Offline" : "Conectando"}
               </span>
             </div>
           </TooltipTrigger>
           <TooltipContent>
             {isConnected === true
-              ? "Browserless está acessível"
+              ? "API online"
               : isConnected === false
-              ? "Não foi possível conectar ao Browserless"
-              : "Configure a URL do Browserless nas configurações"}
+              ? "API offline ou inacessível"
+              : "Verificando conexão..."}
           </TooltipContent>
         </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => supabase.auth.signOut()}
+          title="Sair"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+        </div>
       </div>
     </header>
   );
-});
+}
