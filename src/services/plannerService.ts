@@ -27,7 +27,6 @@ export function draftToAutomation(draft: PlannerDraft): Omit<Automation, "id" | 
     erp_url: "",
     instructions: "",
     steps: draft.steps,
-    auth: draft.auth,
     inputs_schema: null,
     outputs: [],
     credentials: {},

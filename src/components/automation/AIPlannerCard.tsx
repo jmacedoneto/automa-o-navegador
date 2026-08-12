@@ -113,9 +113,9 @@ export function AIPlannerCard() {
               {draft.automation_name}
               <Badge variant="outline" className="ml-auto">{draft.steps.length} steps</Badge>
             </div>
-            {draft.auth && (
+            {draft.steps[0]?.auth && (
               <div className="text-xs text-muted-foreground">
-                🔐 auth: {String((draft.auth as Record<string, unknown>).type || "unknown")}
+                🔐 auth: {String(((draft.steps[0].auth as Record<string, unknown>) || {}).type || "unknown")}
               </div>
             )}
             <pre className="text-xs overflow-x-auto bg-background p-2 rounded border max-h-48">

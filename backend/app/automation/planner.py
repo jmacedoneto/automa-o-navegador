@@ -45,8 +45,9 @@ _SYSTEM_PROMPT = """You generate NavRunner DSL automation drafts.
 NavRunner DSL is a JSON-based automation language. Each draft is a dict with:
 - automation_name: snake_case string
 - version: 1
-- auth (optional): an auth block for form_login OR cookie_reuse OR otp_via_telegram
 - steps: list of step dicts. Each step has an `id` and one of:
+    - {"id":"auth","auth":{"type":"form_login","url":"...","credentials_ref":"site_login","selectors":{...},"success_assert":{...}}}
+        (only when login is required; auth must be the FIRST step)
     - {"id":"x","goto":{"url":"..."}}
     - {"id":"x","wait_for":{"selector":"...","timeout_ms":5000}}
     - {"id":"x","click":{"selector":"..."}}
@@ -59,8 +60,8 @@ NavRunner DSL is a JSON-based automation language. Each draft is a dict with:
     - {"id":"x","if":{"condition":"{{input.x}} == 5","then_steps":[...],"else_steps":[...]}}
 - notes: list of strings — caveats the user must address before saving
 
-If the user mentions "login", "autenticação", "sign in", include an `auth` block.
-If they explicitly say "no auth" or "já logado" or similar, omit `auth`.
+CRITICAL: If the user mentions "login", "autenticação", "sign in", the FIRST element of `steps` MUST be {"id":"auth","auth":{...}}. The runner strips it from the step list at runtime and uses it to authenticate before any other step.
+If the user explicitly says "no auth" or "já logado" or similar, do NOT include an auth step.
 Otherwise, default to `form_login` with `credentials_ref="site_login"`.
 
 If the user asks for a dynamic loop ("for each X", "iterate over", "todos os..."), wrap the inner steps in `for_each`.

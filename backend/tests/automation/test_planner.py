@@ -18,17 +18,21 @@ def _fake_response(steps_dict):
 
 
 def test_plan_automation_returns_dsl_draft(monkeypatch):
+    """The auth block is steps[0] (runner convention)."""
     draft = {
         "automation_name": "cotar_carro",
         "version": 1,
-        "auth": {
-            "type": "form_login",
-            "url": "https://app.apvs.vc",
-            "credentials_ref": "apvs_login",
-            "selectors": {"user": "input[type=text]", "pass": "input[type=password]", "submit": "button"},
-            "success_assert": {"selector": ".dashboard", "timeout_ms": 30000},
-        },
         "steps": [
+            {
+                "id": "auth",
+                "auth": {
+                    "type": "form_login",
+                    "url": "https://app.apvs.vc",
+                    "credentials_ref": "apvs_login",
+                    "selectors": {"user": "input[type=text]", "pass": "input[type=password]", "submit": "button"},
+                    "success_assert": {"selector": ".dashboard", "timeout_ms": 30000},
+                },
+            },
             {"id": "open_app", "goto": "https://app.apvs.vc/dashboard"},
             {"id": "fill_cnpj", "fill": {"#cnpj": "{{input.cnpj}}"}},
         ],
@@ -45,7 +49,11 @@ def test_plan_automation_returns_dsl_draft(monkeypatch):
     ))
     assert out["automation_name"] == "cotar_carro"
     assert isinstance(out["steps"], list)
-    assert out["steps"][0]["goto"] == "https://app.apvs.vc/dashboard"
+    # First step is the auth envelope.
+    assert out["steps"][0]["id"] == "auth"
+    assert out["steps"][0]["auth"]["type"] == "form_login"
+    # Second step is the real navigation.
+    assert out["steps"][1]["goto"] == "https://app.apvs.vc/dashboard"
 
 
 def test_plan_automation_handles_no_auth(monkeypatch):
