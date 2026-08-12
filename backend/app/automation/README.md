@@ -4,7 +4,7 @@ Declarative browser automation framework for the `autonavegador` stack. Replaces
 the brittle Python-per-automation pattern (see `cotacao_pvs/automacao_cotacao.py`)
 with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 
-## Status: P9 (single-pane authoring + AI Planner + auth + sandbox + concurrency)
+## Status: P7 (webhook trigger hardened + single-pane authoring + AI Planner + auth + sandbox + concurrency)
 
 ### Implemented (P0 + P1a + P1b + P2 + P3 + P5)
 
@@ -34,6 +34,7 @@ with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 - NavRecorder (P3) — Chrome extension exports Playwright trace, recorder.py converts to `auth` + `steps` draft
 - **AI Planner (P6)** — `POST /api/planner/plan` accepts a description, returns a NavRunner DSL draft. UI: `AIPlannerCard` in the automation list (textarea + 2 inputs + generate + preview + save).
 - **Single-pane authoring (P9)** — `/create` page with 3 tabs (Manual / Record / AI Planner). Pick the mode that fits the task.
+- **Webhook trigger hardened (P7)** — `POST /api/trigger/{id}` accepts variables, validates required inputs against `steps` JSON (returns 400 with `missing_variables`), supports HMAC-SHA256 (via `webhook_secret` + `X-Signature` header) or simple token (`webhook_token` + `?token=` or `X-Token`). Returns `execution_id`, `task_id`, `automation_name`, `dispatched_at`, `variables_received`.
 
 ### Deferred to later phases
 
