@@ -91,24 +91,24 @@ def _detect_login_block(actions: list[dict]) -> dict | None:
                   -> click(submit) -> [wait_for]
     """
     if len(actions) < 5:
-        return None
+        return None, actions
     a = actions
     if a[0].get("type") != "navigate":
-        return None
+        return None, actions
     if a[1].get("type") != "click" or not _is_login_entry_click(a[1].get("selector", "")):
-        return None
+        return None, actions
     i = 2
     type_block: list[dict] = []
     while i < len(a) and a[i].get("type") == "type":
         type_block.append(a[i])
         i += 1
     if len(type_block) < 2:
-        return None
+        return None, actions
     has_password = any(_is_password_input(t["selector"], t["value"]) for t in type_block)
     if not has_password:
-        return None
+        return None, actions
     if i >= len(a) or a[i].get("type") != "click" or not _is_submit_click(a[i].get("selector", "")):
-        return None
+        return None, actions
     submit = a[i]
     i += 1
     # wait_for is optional — if present, use its selector as success_assert
@@ -137,7 +137,7 @@ def _detect_login_block(actions: list[dict]) -> dict | None:
             "submit": submit.get("selector", "button[type=submit]"),
         },
         "success_assert": {"selector": success_selector, "timeout_ms": timeout_ms},
-    }
+    }, a[i:]
 
 
 def _credentials_ref_from_url(url: str) -> str:
@@ -236,27 +236,48 @@ def _group_consecutive_fills(steps: list[dict]) -> list[dict]:
 
 # ── Top-level conversion ──────────────────────────────────────────────────
 
+# Notes that surface to the painel so the user knows what to fix in the draft.
+# These are non-fatal — the recorder is best-effort; the user reviews anyway.
+_DEFAULT_NOTES: list[str] = [
+    "Draft output — review and edit before saving. "
+    "Add `credentials_ref`, `inputs`, `outputs`, and an `inputs_schema` JSON.",
+    "If a `login_block` step is present, lift it to a top-level `auth` field "
+    "(the runner's auth handler reads `auth`, not a step). "
+    "The `auth` runner wires in P5.",
+]
+
+
 def steps_from_trace(payload: dict) -> dict[str, Any]:
     actions = payload.get("actions") or []
-    login_block = _detect_login_block(actions)
+    login_block, remaining = _detect_login_block(actions)
 
     steps: list[dict[str, Any]] = []
     idx = 0
+    notes: list[str] = list(_DEFAULT_NOTES)
     if login_block is not None:
         steps.append({
             "id": "login_block",
             "login_block": login_block,
         })
         idx += 1
-    for action in actions:
+    unknown_count = 0
+    for action in remaining:
         built = _build_step(action, idx)
-        if built is not None:
-            steps.append(built)
-            idx += 1
+        if built is None:
+            unknown_count += 1
+            continue
+        steps.append(built)
+        idx += 1
+    if unknown_count:
+        notes.append(
+            f"{unknown_count} unsupported action(s) were skipped "
+            f"(e.g. drag, scroll, keypress). Add them manually if needed."
+        )
     steps = _group_consecutive_fills(steps)
 
     return {
         "automation_name": _automation_name_from_title_or_url(payload),
         "version": 1,
         "steps": steps,
+        "notes": notes,
     }

@@ -52,10 +52,12 @@ def test_parse_trace_file_raises_on_invalid_json(tmp_path):
 
 
 def test_steps_from_trace_basic_actions():
-    steps = steps_from_trace(SAMPLE_TRACE)["steps"]
-    assert len(steps) >= 5
-    first_action = next(s for s in steps if "goto" in s)
-    assert first_action["goto"]["url"] == "https://app.apvs.vc/home"
+    out = steps_from_trace(SAMPLE_TRACE)
+    steps = out["steps"]
+    # The login block is consumed (replaced by a single login_block step).
+    assert len(steps) >= 1
+    # First step is the login block.
+    assert "login_block" in steps[0]
 
 
 def test_steps_from_trace_detects_login_block():
