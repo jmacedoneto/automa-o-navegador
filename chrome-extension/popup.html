@@ -1,46 +1,121 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>AutoPilot Gravador</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; width: 280px; padding: 15px; background: #0f172a; color: #f8fafc; margin: 0; }
-        h3 { margin-top: 0; font-size: 16px; font-weight: 500; border-bottom: 1px solid #1e293b; padding-bottom: 10px; color: #e2e8f0; }
-        .btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: all 0.2s; }
-        .btn-start { background-color: #8b5cf6; color: white; }
-        .btn-start:hover { background-color: #7c3aed; }
-        .btn-stop { background-color: #ef4444; color: white; display: none; }
-        .btn-stop:hover { background-color: #dc2626; }
-        .btn-export { background-color: #10b981; color: white; display: none; }
-        .btn-export:hover { background-color: #059669; }
-        .status-container { margin-bottom: 15px; text-align: center; }
-        .status-text { font-size: 14px; font-weight: 500; }
-        .status-text.idle { color: #94a3b8; }
-        .status-text.recording { color: #ef4444; animation: blink 1.5s infinite; }
-        .step-count { font-size: 12px; color: #94a3b8; margin-top: 5px; text-align: center; }
-        
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>AutoPilot Gravador</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; width: 340px; background: #0f172a; color: #f8fafc; }
+
+    .header { padding: 14px 16px 10px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 8px; }
+    .header-icon { font-size: 18px; }
+    .header-title { font-size: 15px; font-weight: 700; color: #e2e8f0; }
+    .header-version { font-size: 10px; color: #475569; margin-left: auto; }
+
+    .status-bar { padding: 8px 16px; background: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; flex-shrink: 0; }
+    .dot.recording { background: #ef4444; animation: pulse 1.2s infinite; }
+    .dot.idle { background: #22c55e; }
+    .status-label { font-weight: 600; }
+    .step-badge { margin-left: auto; background: #334155; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+    .actions { padding: 10px 16px; display: flex; flex-direction: column; gap: 6px; }
+    .btn { width: 100%; padding: 9px 14px; border: none; border-radius: 7px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background .15s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-start  { background: #8b5cf6; color: #fff; }
+    .btn-start:hover:not(:disabled) { background: #7c3aed; }
+    .btn-stop   { background: #ef4444; color: #fff; }
+    .btn-stop:hover:not(:disabled)  { background: #dc2626; }
+    .btn-send   { background: #3b82f6; color: #fff; }
+    .btn-send:hover:not(:disabled)  { background: #2563eb; }
+    .btn-export { background: #10b981; color: #fff; }
+    .btn-export:hover:not(:disabled){ background: #059669; }
+    .btn-clear  { background: #1e293b; color: #94a3b8; font-size: 12px; padding: 7px; }
+    .btn-clear:hover:not(:disabled) { background: #334155; }
+
+    .msg { margin: 0 16px 6px; font-size: 12px; padding: 7px 10px; border-radius: 6px; display: none; }
+    .msg.success { background: #064e3b; color: #6ee7b7; display: block; }
+    .msg.error   { background: #7f1d1d; color: #fca5a5; display: block; }
+
+    .steps-section { border-top: 1px solid #1e293b; }
+    .steps-header { padding: 8px 16px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; display: flex; align-items: center; justify-content: space-between; }
+    .steps-list { max-height: 180px; overflow-y: auto; padding: 0 8px 8px; }
+    .steps-list::-webkit-scrollbar { width: 4px; }
+    .steps-list::-webkit-scrollbar-track { background: transparent; }
+    .steps-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .step-item { display: flex; align-items: flex-start; gap: 6px; padding: 5px 6px; border-radius: 5px; margin-bottom: 2px; }
+    .step-item:hover { background: #1e293b; }
+    .step-num { font-size: 10px; color: #475569; min-width: 16px; text-align: right; padding-top: 1px; }
+    .step-badge-type { font-size: 10px; background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #94a3b8; min-width: 52px; text-align: center; }
+    .step-badge-type.navigate { color: #818cf8; background: #1e1b4b; }
+    .step-badge-type.click    { color: #fb923c; background: #431407; }
+    .step-badge-type.type     { color: #34d399; background: #064e3b; }
+    .step-badge-type.select   { color: #f472b6; background: #4a044e; }
+    .step-badge-type.hover    { color: #fbbf24; background: #451a03; }
+    .step-desc { font-size: 11px; color: #94a3b8; flex: 1; word-break: break-all; line-height: 1.4; }
+    .step-del { font-size: 11px; color: #475569; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .step-del:hover { color: #ef4444; }
+    .steps-empty { padding: 12px; text-align: center; color: #475569; font-size: 12px; }
+
+    .config-section { border-top: 1px solid #1e293b; }
+    .config-toggle { width: 100%; padding: 9px 16px; background: none; border: none; color: #64748b; font-size: 12px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 6px; }
+    .config-toggle:hover { color: #94a3b8; }
+    .config-body { display: none; padding: 10px 16px; }
+    .config-body.open { display: block; }
+    label { display: block; font-size: 11px; color: #64748b; margin-bottom: 3px; margin-top: 8px; }
+    input[type="url"], input[type="text"] {
+      width: 100%; padding: 7px 9px; border-radius: 5px; border: 1px solid #334155;
+      background: #1e293b; color: #f8fafc; font-size: 12px;
+    }
+    input[type="url"]:focus, input[type="text"]:focus { outline: 1px solid #8b5cf6; }
+
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  </style>
 </head>
 <body>
-    <h3>AutoPilot - Gravador</h3>
-    
-    <div class="status-container">
-        <span id="statusText" class="status-text idle">Pronto para gravar</span>
+
+  <div class="header">
+    <span class="header-icon">⚡</span>
+    <span class="header-title">AutoPilot Gravador</span>
+    <span class="header-version">v2.0</span>
+  </div>
+
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span class="status-label" id="statusLabel">Pronto</span>
+    <span class="step-badge" id="stepBadge">0 passos</span>
+  </div>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="actions">
+    <button id="startBtn" class="btn btn-start">▶ Iniciar Gravação</button>
+    <button id="stopBtn"  class="btn btn-stop" style="display:none">⏹ Parar Gravação</button>
+    <button id="sendBtn"  class="btn btn-send"   style="display:none">⬆ Enviar para AutoPilot</button>
+    <button id="exportBtn"class="btn btn-export" style="display:none">⬇ Exportar JSON</button>
+    <button id="clearBtn" class="btn btn-clear"  style="display:none">✕ Limpar todos os passos</button>
+  </div>
+
+  <div class="steps-section">
+    <div class="steps-header">
+      <span>Passos gravados</span>
     </div>
-
-    <button id="startBtn" class="btn btn-start">Iniciar Gravação</button>
-    <button id="stopBtn" class="btn btn-stop">Parar Gravação</button>
-    <button id="exportBtn" class="btn btn-export">Exportar JSON</button>
-
-    <div class="step-count">
-        Passos gravados: <span id="stepCount">0</span>
+    <div class="steps-list" id="stepsList">
+      <div class="steps-empty">Nenhum passo ainda</div>
     </div>
+  </div>
 
-    <script src="popup.js"></script>
+  <div class="config-section">
+    <button class="config-toggle" id="configToggle">⚙ Configurações da API</button>
+    <div class="config-body" id="configBody">
+      <label>URL do AutoPilot API</label>
+      <input id="apiUrl" type="url" placeholder="https://autopilot.seudominio.com/api" />
+      <label>ID da Automação</label>
+      <input id="automationId" type="text" placeholder="cole o UUID aqui" />
+      <button class="btn btn-start" id="saveConfig" style="margin-top:10px;padding:8px">Salvar configurações</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>
