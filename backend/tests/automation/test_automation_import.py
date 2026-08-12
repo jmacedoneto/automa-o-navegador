@@ -26,7 +26,8 @@ def test_import_trace_returns_dsl_draft():
     assert body["automation_name"] == "smoke"
     assert isinstance(body["steps"], list)
     kinds = [list(s.keys()) for s in body["steps"]]
-    assert any("login_block" in k for k in kinds)
+    # login_block is now top-level (auth), not a step.
+    assert "auth" in body
     assert any("click" in k for k in kinds)
 
 
