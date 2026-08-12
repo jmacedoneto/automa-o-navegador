@@ -144,9 +144,17 @@
             "bind": "resultado"
           },
           {
+            "id": "set_has_result",
+            "run_python": {
+              "value": "bindings['has_result'] = bindings.get('resultado') is not None",
+              "timeout_ms": 5000
+            },
+            "bind": "has_result"
+          },
+          {
             "id": "save_to_supabase",
             "if": {
-              "condition": "bindings.get('resultado') is not None",
+              "condition": "{{has_result}} == True",
               "then_steps": [
                 {
                   "id": "patch_supabase",
