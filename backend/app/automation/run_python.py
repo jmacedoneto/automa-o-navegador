@@ -1,90 +1,38 @@
-"""run_python step — execute arbitrary Python with access to page/inputs/bindings.
+"""run_python step — execute arbitrary code in a subprocess sandbox.
 
-P1a executes on the same thread as the runner (no subprocess). The code runs
-in a restricted namespace dict populated with `page`, `inputs`, `bindings`,
-plus a few safe stdlib imports. P5 will add sandboxing (subprocess, seccomp,
-or RestrictedPython).
-
-A timeout is honored via `asyncio.wait_for`; exceeding it raises `TimeoutError`.
-The exception is NOT swallowed — the runner decides retry/abort based on
-`Step.retry.on_fail`.
-
-Expression handling: a single expression is evaluated with `compile(..., "eval")`
-so its value is returned (and can be `bind`-captured). Multi-statement scripts
-fall back to `exec`; when `bind` matches a variable assigned in the script,
-that variable's value is captured.
+P5 implementation: code runs in a separate Python process via the
+`run_sandboxed` helper. The sandbox denies `os`, `subprocess`, `importlib`,
+`ctypes`, `socket`, etc. Enforces a timeout via process termination.
 """
-import asyncio
-import time
 from typing import Any
 
 from app.automation.models import RunContext
-
-
-# Safe builtins. `__import__` and exception types are intentionally allowed so
-# the escape hatch can use stdlib + raise errors (required by tests + reasonable
-# for real automation scripts like cotacao_pvs that need `import time` etc.).
-# P5 will replace this namespace with a true sandbox (subprocess/seccomp).
-_SAFE_BUILTINS = {
-    "len": len, "str": str, "int": int, "float": float, "bool": bool,
-    "list": list, "dict": dict, "tuple": tuple, "set": set,
-    "range": range, "enumerate": enumerate, "zip": zip,
-    "min": min, "max": max, "sum": sum, "abs": abs,
-    "print": print,
-    "True": True, "False": False, "None": None,
-    "__import__": __import__,
-    "RuntimeError": RuntimeError,
-    "ValueError": ValueError,
-    "TypeError": TypeError,
-    "KeyError": KeyError,
-    "Exception": Exception,
-}
+from app.automation.sandbox import run_sandboxed
 
 
 async def run_python(page: Any, params: dict[str, Any], ctx: RunContext) -> Any:
-    """Execute `params["value"]` as Python code, optionally binding the result."""
+    """Execute `params["value"]` as Python code in a subprocess sandbox."""
     code = params["value"]
     timeout_ms = int(params.get("timeout_ms", 30000))
     bind = params.get("bind")
 
-    # Pre-extract test-only hook(s) so they don't pollute the namespace.
-    test_seen = params.get("_test_seen")
-
-    namespace: dict[str, Any] = {
-        "__builtins__": _SAFE_BUILTINS,
+    ns = {
         "page": page,
         "inputs": ctx.inputs,
         "bindings": ctx.bindings,
-        "asyncio": asyncio,
-        "time": time,
+        "asyncio": __import__("asyncio"),
     }
+    # Preserve the legacy `_test_seen` hook used by test_run_python.
+    test_seen = params.get("_test_seen")
     if test_seen is not None:
-        namespace["seen"] = test_seen
-
-    async def _exec() -> Any:
-        # Run in a thread so blocking calls (e.g. `time.sleep`) don't stall
-        # the event loop — required for `asyncio.wait_for` to enforce the
-        # timeout.
-        def _run_sync() -> Any:
-            try:
-                compiled = compile(code, "<run_python>", "eval")
-                return eval(compiled, namespace)
-            except SyntaxError:
-                compiled = compile(code, "<run_python>", "exec")
-                return eval(compiled, namespace)
-
-        result: Any = await asyncio.to_thread(_run_sync)
-        if asyncio.iscoroutine(result):
-            result = await result
-        return result
-
-    try:
-        out = await asyncio.wait_for(_exec(), timeout=timeout_ms / 1000.0)
-    except asyncio.TimeoutError as e:
-        raise TimeoutError(f"run_python timed out after {timeout_ms}ms") from e
-
+        ns["seen"] = test_seen
+    out = await run_sandboxed(code, ns, timeout_s=max(1, timeout_ms // 1000))
     if bind:
-        # Prefer the named variable from the namespace (set by the script),
-        # fall back to the expression return value.
-        ctx.bindings[bind] = namespace.get(bind, out)
+        # The sandbox returns either the eval-mode value or, for exec-mode
+        # scripts without an explicit `result = ...`, a dict of user vars.
+        # Prefer the named variable when the return is a dict.
+        if isinstance(out, dict) and bind in out:
+            ctx.bindings[bind] = out[bind]
+        else:
+            ctx.bindings[bind] = out
     return out
