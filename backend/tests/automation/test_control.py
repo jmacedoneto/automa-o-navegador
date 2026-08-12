@@ -12,10 +12,10 @@ def _run(coro):
 def test_for_each_iterates_items_calls_visit():
     page = object()
     visited = []
-    async def visit(ctx, item):
-        visited.append(item)
+    async def visit(ctx, child):
+        visited.append(ctx.bindings["n"])
     ctx = RunContext()
-    spec = {"items": [1, 2, 3], "as": "n", "steps": []}
+    spec = {"items": [1, 2, 3], "as": "n", "steps": [{"id": "s"}]}
     _run(run_for_each(page, spec, ctx, _visit=visit))
     assert visited == [1, 2, 3]
 
@@ -23,10 +23,10 @@ def test_for_each_iterates_items_calls_visit():
 def test_for_each_binds_item_in_context():
     page = object()
     seen_items = []
-    async def visit(ctx, item):
+    async def visit(ctx, child):
         seen_items.append(ctx.bindings["x"])
     ctx = RunContext()
-    spec = {"items": ["a", "b"], "as": "x", "steps": []}
+    spec = {"items": ["a", "b"], "as": "x", "steps": [{"id": "s"}]}
     _run(run_for_each(page, spec, ctx, _visit=visit))
     assert seen_items == ["a", "b"]
 
@@ -34,10 +34,10 @@ def test_for_each_binds_item_in_context():
 def test_for_each_provides_loop_index():
     page = object()
     seen_indices = []
-    async def visit(ctx, item):
+    async def visit(ctx, child):
         seen_indices.append(ctx.bindings.get("loop", {}).get("index"))
     ctx = RunContext()
-    spec = {"items": ["a", "b", "c"], "as": "x", "steps": []}
+    spec = {"items": ["a", "b", "c"], "as": "x", "steps": [{"id": "s"}]}
     _run(run_for_each(page, spec, ctx, _visit=visit))
     assert seen_indices == [1, 2, 3]
 
@@ -45,10 +45,10 @@ def test_for_each_provides_loop_index():
 def test_for_each_max_iterations_cap():
     page = object()
     visited = []
-    async def visit(ctx, item):
-        visited.append(item)
+    async def visit(ctx, child):
+        visited.append(ctx.bindings["x"])
     ctx = RunContext()
-    spec = {"items": list(range(100)), "as": "x", "max_iterations": 5, "steps": []}
+    spec = {"items": list(range(100)), "as": "x", "max_iterations": 5, "steps": [{"id": "s"}]}
     with pytest.raises(ValueError, match="cap is 5"):
         _run(run_for_each(page, spec, ctx, _visit=visit))
 
@@ -57,17 +57,17 @@ def test_for_each_missing_keys_raises():
     page = object()
     ctx = RunContext()
     with pytest.raises(ValueError, match="requires"):
-        _run(run_for_each(page, {"items": []}, ctx, _visit=lambda c, i: None))
+        _run(run_for_each(page, {"items": []}, ctx, _visit=lambda c, s: None))
 
 
 def test_for_each_interpolates_string_items():
     """String items in `items` go through interpolate() before iteration."""
     page = object()
     seen = []
-    async def visit(ctx, item):
-        seen.append(item)
+    async def visit(ctx, child):
+        seen.append(ctx.bindings["f"])
     ctx = RunContext(inputs={"faixas": [100, 200, 300]})
-    spec = {"items": "{{input.faixas}}", "as": "f", "steps": []}
+    spec = {"items": "{{input.faixas}}", "as": "f", "steps": [{"id": "s"}]}
     _run(run_for_each(page, spec, ctx, _visit=visit))
     assert seen == [100, 200, 300]
 

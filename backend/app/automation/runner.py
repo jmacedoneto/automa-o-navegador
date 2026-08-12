@@ -97,10 +97,13 @@ class NavRunner:
         steps = list(steps)
         ctx = RunContext(inputs=inputs, bindings={}, credentials=credentials or {})
         result = RunResult(status="success", run_id=self.cfg.run_id)
+        self._page = None
+        self._current_result = result
         Path(self.cfg.screenshot_dir).mkdir(parents=True, exist_ok=True)
 
         pw, browser = await _connect_playwright(self.cfg.browser_endpoint)
         page = await browser.new_page()
+        self._page = page
         result.page = page
         try:
             with langfuse_span("navrunner.run", run_id=self.cfg.run_id, steps=len(steps)):
@@ -117,6 +120,8 @@ class NavRunner:
         finally:
             await browser.close()
             await pw.stop()
+            self._page = None
+            self._current_result = None
         return result
 
     async def _capture_screenshot(
@@ -144,23 +149,59 @@ class NavRunner:
         except Exception:
             pass
 
-    async def _visit_child(self, ctx: RunContext, child: Any) -> None:
-        """Run a single child step (control flow).
+    async def _run_one_inner(self, page: Page, step: Step, ctx: RunContext, result: RunResult) -> None:
+        """Like _run_one but without the per-step wrapper — used by _visit_child."""
+        started_at = datetime.now(timezone.utc)
+        _emit_step_log(
+            self.cfg.run_id, step.id, "running",
+            started_at=started_at.isoformat(),
+        )
+        with langfuse_span("navrunner.step", step_id=step.id, action=step.action):
+            try:
+                await execute_step(page, step, ctx, on_visit_child=self._visit_child)
+                await self._capture_screenshot(page, step.id, "after", result)
+                _emit_step_log(
+                    self.cfg.run_id, step.id, "ok",
+                    started_at=started_at.isoformat(),
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                    bindings=dict(ctx.bindings),
+                    screenshot_keys=list(result.screenshot_keys),
+                    screenshot_urls=dict(result.screenshot_urls),
+                )
+            except Exception as e:
+                err = f"{step.id}: {type(e).__name__}: {e}"
+                result.errors.append(err)
+                _emit_step_log(
+                    self.cfg.run_id, step.id, "failed",
+                    started_at=started_at.isoformat(),
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                    error=err,
+                    bindings=dict(ctx.bindings),
+                    screenshot_keys=list(result.screenshot_keys),
+                    screenshot_urls=dict(result.screenshot_urls),
+                )
+                await self._capture_screenshot(page, step.id, "on_fail", result)
+                raise
 
-        P1a wires the hook so the dispatcher can plug a writer. P1b implements
-        the actual nested execution (currently raises NotImplementedError for child
-        steps since the recursive page reference needs an executor strategy).
-        """
+    async def _visit_child(self, ctx: RunContext, child: Any) -> None:
+        """Run a single child step inside a for_each / if branch."""
         if isinstance(child, dict):
             step = Step.from_dict(child)
         elif isinstance(child, Step):
             step = child
         else:
             raise ValueError(f"Unexpected child type: {type(child).__name__}")
-        raise NotImplementedError(
-            "Nested step execution (for_each/if children) lands in P1b — "
-            "this hook is only exercised by unit tests in P1a."
-        )
+
+        page = getattr(self, "_page", None)
+        if page is None:
+            raise RuntimeError(
+                "_visit_child called before run_steps initialized the page; "
+                "this is a bug."
+            )
+        result = getattr(self, "_current_result", None)
+        if result is None:
+            raise RuntimeError("_visit_child needs an active result context")
+        await self._run_one_inner(page, step, ctx, result)
 
     async def _run_one(self, page: Page, step: Step, ctx: RunContext, result: RunResult) -> None:
         started_at = datetime.now(timezone.utc)
