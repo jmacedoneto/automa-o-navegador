@@ -11,7 +11,7 @@ from playwright.async_api import async_playwright, Page
 
 from app.automation.interpreter import execute_step
 from app.automation.models import RunContext, Step
-from app.automation.storage import build_screenshot_key
+from app.automation.storage import build_screenshot_key, upload_to_minio
 from app.automation.tracing import langfuse_span
 
 
@@ -31,6 +31,7 @@ class RunResult:
     bindings: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     screenshot_keys: list[str] = field(default_factory=list)
+    screenshot_urls: dict[str, str] = field(default_factory=dict)  # phase -> presigned URL
     page: Any = None                  # exposed for tests; do not use in production code
     trace_id: str | None = None
 
@@ -84,24 +85,56 @@ class NavRunner:
             await pw.stop()
         return result
 
+    async def _capture_screenshot(
+        self,
+        page: Page,
+        step_id: str,
+        phase: str,
+        result: RunResult,
+    ) -> None:
+        """Write screenshot to local disk; upload to MinIO when configured.
+
+        Failures anywhere are non-fatal — the on-disk file is the fallback.
+        """
+        key = build_screenshot_key(self.cfg.run_id, step_id, phase)
+        local = Path(self.cfg.screenshot_dir) / Path(key).name
+        try:
+            await page.screenshot(path=str(local))
+        except Exception:
+            return
+        result.screenshot_keys.append(key)
+        try:
+            url = upload_to_minio(local, self.cfg.run_id, step_id, phase)
+            if url:
+                result.screenshot_urls[phase] = url
+        except Exception:
+            pass
+
+    async def _visit_child(self, ctx: RunContext, child: Any) -> None:
+        """Run a single child step (control flow).
+
+        P1a wires the hook so the dispatcher can plug a writer. P1b implements
+        the actual nested execution (currently raises NotImplementedError for child
+        steps since the recursive page reference needs an executor strategy).
+        """
+        if isinstance(child, dict):
+            step = Step.from_dict(child)
+        elif isinstance(child, Step):
+            step = child
+        else:
+            raise ValueError(f"Unexpected child type: {type(child).__name__}")
+        raise NotImplementedError(
+            "Nested step execution (for_each/if children) lands in P1b — "
+            "this hook is only exercised by unit tests in P1a."
+        )
+
     async def _run_one(self, page: Page, step: Step, ctx: RunContext, result: RunResult) -> None:
         with langfuse_span("navrunner.step", step_id=step.id, action=step.action):
             try:
-                await execute_step(page, step, ctx)
-                if self.cfg.capture_screenshot_per_step:
-                    key = build_screenshot_key(self.cfg.run_id, step.id, "after")
-                    local = Path(self.cfg.screenshot_dir) / Path(key).name
-                    await page.screenshot(path=str(local))
-                    result.screenshot_keys.append(key)
+                await execute_step(page, step, ctx, on_visit_child=self._visit_child)
+                await self._capture_screenshot(page, step.id, "after", result)
             except Exception as e:
                 err = f"{step.id}: {type(e).__name__}: {e}"
                 result.errors.append(err)
-                # Always capture on_fail screenshot, best-effort.
-                try:
-                    fail_key = build_screenshot_key(self.cfg.run_id, step.id, "on_fail")
-                    local = Path(self.cfg.screenshot_dir) / Path(fail_key).name
-                    await page.screenshot(path=str(local))
-                    result.screenshot_keys.append(fail_key)
-                except Exception:
-                    pass
+                await self._capture_screenshot(page, step.id, "on_fail", result)
                 raise
