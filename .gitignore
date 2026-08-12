@@ -25,3 +25,24 @@ dist-ssr
 
 .worktrees/
 
+
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Venvs
+.venv/
+venv/
+env/
+
+# Backups / secrets
+*.bak
+*.bak.*
+"Chave Openai.txt"
+Chave\ Openai.txt
+chrome-extension-v2.zip
