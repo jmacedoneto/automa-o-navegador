@@ -137,11 +137,12 @@
           },
           {
             "id": "extract_plano",
-            "run_python": {
-              "value": "from cotacao_pvs.ionic_helpers import extrair_menor_parcela; body = await page.evaluate('''() => { const pages = document.querySelectorAll('.ion-page:not(.ion-page-hidden)'); for (const p of pages) { if (p.innerText.includes('Planos') || p.innerText.includes('R$')) return p.innerText; } return ''; }'''); resultado = extrair_menor_parcela(body); bindings['resultado'] = resultado; bindings['combo_done'] = dict(combo); bindings['valor'] = resultado",
+            "run_ai": {
+              "schema": "ResultadoCotacao",
+              "instruction": "extraia o valor total (menor parcela em R$), prazo em meses, e status (ok ou rejeitado) do plano mais barato",
+              "bind": "resultado",
               "timeout_ms": 30000
-            },
-            "bind": "resultado"
+            }
           },
           {
             "id": "set_has_result",
