@@ -1,0 +1,9 @@
+{
+  "automation_name": "hello_world",
+  "inputs": {},
+  "steps": [
+    { "id": "open",       "goto": "https://example.com" },
+    { "id": "wait_loaded", "wait_for": { "selector": "h1", "timeout_ms": 10000 } },
+    { "id": "verify",      "assert": { "text": "Example Domain", "timeout_ms": 5000 } }
+  ]
+}

@@ -139,6 +139,16 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 
+# When a step's action is given a bare string, wrap it under a semantic key.
+# Example: `{"goto": "https://x"}` → params = {"url": "https://x"}.
+_BARE_STRING_KEYS: dict[str, str] = {
+    "goto": "url",
+    "click": "selector",
+    "wait_for": "selector",
+    "assert": "text",
+}
+
+
 @dataclass
 class RetryPolicy:
     attempts: int = 1
@@ -166,7 +176,6 @@ class Step:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "Step":
-        # The DSL shape: each non-meta key is either an action or a meta key.
         ACTION_KEYS = {"goto", "click", "fill", "wait_for", "assert", "run_ai",
                        "run_python", "for_each", "if", "reload", "go_back",
                        "extract_text", "extract_table", "screenshot"}
@@ -178,7 +187,13 @@ class Step:
         action = action_keys[0]
         params = raw[action]
         if not isinstance(params, dict):
-            params = {"value": params}
+            # Bare-string action: wrap under its semantic key.
+            key = _BARE_STRING_KEYS.get(action, "value")
+            params = {key: params}
+
+        if "retry" in raw:
+            meta["retry"] = RetryPolicy.from_dict(raw["retry"])
+
         return cls(action=action, params=params, **meta)
 
 
@@ -192,29 +207,32 @@ class RunContext:
         self.bindings[name] = value
 
     def get(self, dotted: str, default: Any = None) -> Any:
-        """Resolve 'input.x.y' or 'r.x.y' or 'cfg.x' or just 'x' against inputs/bindings/credentials."""
+        """Resolve 'input.x.y' / 'cfg.x.y' / bare 'name' / nested 'name.x.y' against inputs/bindings/credentials.
+
+        'input' and 'cfg' are namespace prefixes pointing at self.inputs / self.credentials.
+        Anything else (with or without further dots) is looked up in self.bindings.
+        Leaf values that aren't dicts are returned as-is (don't break traversal).
+        """
         parts = dotted.split(".")
         head, rest = parts[0], parts[1:]
-        sources = [
-            ("input", self.inputs),
-            ("", self.bindings),     # bare names and bindings hit here
-            ("cfg", self.credentials),
-        ]
-        for prefix, scope in sources:
-            if head == prefix or (prefix == "" and head in scope):
-                obj = scope.get(head) if prefix == "" else scope.get(head)
-                if obj is None:
-                    continue
-                cur = obj
-                for p in rest:
-                    if isinstance(cur, dict) and p in cur:
-                        cur = cur[p]
-                    else:
-                        cur = None
-                        break
-                if cur is not None:
-                    return cur
-        return default
+
+        if head == "input":
+            return _walk(self.inputs, rest, default)
+        if head == "cfg":
+            return _walk(self.credentials, rest, default)
+
+        # Bare name (with possible dotted sub-keys) lives in bindings.
+        return _walk(self.bindings, [head, *rest], default)
+
+
+def _walk(obj: Any, path: list[str], default: Any) -> Any:
+    cur: Any = obj
+    for p in path:
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        else:
+            return default
+    return cur
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -598,6 +616,11 @@ class _FakeLocator:
         self.clicks = 0
         self.fills = []
 
+    @property
+    def first(self):
+        # Mirrors Playwright Locator.first: single-match shorthand.
+        return self
+
     async def click(self, **kwargs):
         self.clicks += 1
 
@@ -664,7 +687,7 @@ async def fill(page: Page, params: dict[str, Any], ctx: RunContext) -> None:
     for raw_selector, raw_value in params.items():
         selector = interpolate(raw_selector, ctx)
         value = interpolate(raw_value, ctx)
-        await page.locator(selector).first.fill(value, timeout=15000)
+        await page.locator(selector).first.fill(value)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -697,17 +720,21 @@ from app.automation.models import RunContext
 
 
 class _FakeLocator:
-    def __init__(self, text):
-        self.text = text
-        self.visible = True
+    def __init__(self, text, *, visible=True):
+        self._text = text
+        self._visible = visible
+
+    @property
+    def first(self):
+        return self
 
     async def wait_for(self, **kwargs):
-        if not self.visible:
-            raise TimeoutError("not visible")
+        if not self._visible:
+            raise TimeoutError(f"wait_for timed out; kwargs={kwargs}")
         return self
 
     async def text_content(self):
-        return self.text
+        return self._text
 
 
 class _FakePage:
