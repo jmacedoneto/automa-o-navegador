@@ -109,7 +109,8 @@ async def run_for_each(
         ctx.bindings[binding_name] = item
         ctx.bindings["loop"] = {"index": idx, "total": len(items)}
         try:
-            await _visit(ctx, item)
+            for child in spec.get("steps", []):
+                await _visit(ctx, child)
         finally:
             ctx.bindings.pop(binding_name, None)
             ctx.bindings.pop("loop", None)

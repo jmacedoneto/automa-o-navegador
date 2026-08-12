@@ -84,10 +84,10 @@ def test_step_from_dict_if():
 
 def test_interpreter_for_each_invokes_visit_callback():
     page = object()
-    step = Step.from_dict({"id": "loop", "for_each": {"items": [1, 2], "as": "x", "steps": []}})
+    step = Step.from_dict({"id": "loop", "for_each": {"items": [1, 2], "as": "x", "steps": [{"id": "child"}]}})
     visited = []
-    async def visit(ctx, item):
-        visited.append(item)
+    async def visit(ctx, child):
+        visited.append(ctx.bindings["x"])
     ctx = RunContext()
     _run(execute_step(page, step, ctx, on_visit_child=visit))
     assert visited == [1, 2]
