@@ -32,11 +32,12 @@ with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 
 ### Deferred to later phases
 
-- Chrome extension record-replay (P3)
-- Run detail UI in `painel` (P4)
+- AI Planner (P6) — chat-driven automation creation
+- Painel unificado (P9) — UI single-pane for all 3 authoring modes
 - RestrictedPython sandbox for `run_python` (P5)
 - Per-run `step_log_writer` (instead of module global) when concurrency > 1 needed (P5)
 - Auth strategies: `cookie_reuse`, `otp_via_telegram` (P5)
+- MCP server wrapping the framework (P8, last)
 
 ## Tests
 
@@ -76,6 +77,24 @@ runner = NavRunner(cfg=cfg)
 result = asyncio.run(runner.run_steps(steps=steps, inputs={}))
 print(result.status, result.errors, result.screenshot_keys)
 ```
+
+## Record-Replay (NavRecorder)
+
+Install the Chrome extension from `chrome-extension/` (load unpacked in developer mode). Open the target site, click "Start Recording", perform the flow manually, click "Stop", then "Exportar Trace". Upload the trace file to the painel — the recorder heuristic generates a `steps.json` draft for review.
+
+The recorder is conservative: it detects login blocks automatically, groups consecutive fills, and skips screenshots (the runner already captures them). The user reviews the draft, adds `credentials_ref`, `inputs`, and `outputs`, then saves.
+
+### Backend endpoint
+
+```bash
+curl -X POST http://localhost:8000/api/automation/import-trace \
+  -F "trace_file=@navrunner-trace.json"
+```
+
+Returns a JSON body shaped like `steps.json`. Errors:
+
+- 422: missing `trace_file` field
+- 400: trace is invalid JSON or has wrong shape
 
 ## Architecture
 
