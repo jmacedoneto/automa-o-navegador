@@ -121,7 +121,7 @@ def test_if_bool_operators():
 
 
 def test_if_invalid_expression_raises():
-    with pytest.raises(ValueError, match="Invalid"):
+    with pytest.raises(ValueError, match="Unsupported"):
         _eval_condition("1 ** 2")
     with pytest.raises(ValueError, match="Unsupported"):
         _eval_condition("foo.bar()")
