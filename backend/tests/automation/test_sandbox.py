@@ -39,6 +39,23 @@ def test_sandbox_blocks_dynamic_import():
         _run(run_sandboxed("__import__('os').system('echo pwned')", {}))
 
 
+def test_sandbox_blocks_sys_modules_bypass():
+    """The classic bypass `sys.modules['os'].system(...)` is now blocked too.
+
+    sys is in the block list. The user's code can still reach sys through
+    the `sys` module variable if we don't block it, but the import path
+    is closed.
+    """
+    with __import__("pytest").raises(Exception, match="(sandbox|blocked|not allowed|Forbidden)"):
+        _run(run_sandboxed("import sys; sys.modules['os'].system('echo pwned')", {}))
+
+
+def test_sandbox_blocks_built_in_bypass():
+    """Reaching os via builtins.__import__ is also blocked (builtins in block list)."""
+    with __import__("pytest").raises(Exception, match="(sandbox|blocked|not allowed|Forbidden)"):
+        _run(run_sandboxed("import builtins; builtins.__import__('os').system('echo')", {}))
+
+
 def test_sandbox_allows_safe_stdlib():
     code = """
 import json

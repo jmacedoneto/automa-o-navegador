@@ -23,12 +23,19 @@ from typing import Any
 
 
 # Modules that the sandbox refuses to import.
+# IMPORTANT: this is best-effort defense against ACCIDENTAL misuse (typos,
+# overreaching Iframes in tests). It is NOT a security boundary. A determined
+# attacker with the ability to run arbitrary Python can bypass any
+# in-process sandbox via sys.modules, __subclasses__, or bytecode tricks.
+# For production hardening, deploy the worker in a Docker container with
+# --network=none --security-opt seccomp=...
 _BLOCKED_MODULES = frozenset({
-    "os", "subprocess", "importlib", "importlib.util", "importlib.machinery",
+    "os", "posix", "nt", "subprocess", "importlib", "importlib.util", "importlib.machinery",
     "ctypes", "cffi", "multiprocessing", "socket", "ssl", "_socket",
     "win32api", "win32com", "win32process", "win32security",
-    "_winreg", "posix", "fcntl", "grp", "pwd", "resource",
+    "_winreg", "fcntl", "grp", "pwd", "resource",
     "sysconfig", "distorm", "keystone", "capstone", "unicorn",
+    "sys", "builtins",  # sys.modules, getattr chains — close common bypass
 })
 
 

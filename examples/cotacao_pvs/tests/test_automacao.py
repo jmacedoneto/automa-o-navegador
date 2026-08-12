@@ -87,3 +87,40 @@ def test_executar_cotacao_pvs_dispatches_run_automation_v2(monkeypatch, tmp_path
     assert isinstance(kwargs["steps_payload"], list)
     assert kwargs["inputs"]["cnpj"] == "x"
     assert kwargs["inputs"]["combos"]  # list of combos
+
+
+def test_executar_cotacao_pvs_wraps_auth_block_for_dispatcher(monkeypatch, tmp_path):
+    """The driver wraps the top-level `auth` block so the dispatcher can detect it.
+
+    This is the bridge between steps.json shape (auth next to steps) and the
+    dispatcher's expected shape (auth as steps_payload[0]).
+    """
+    fake_delay = MagicMock(return_value=MagicMock(id="task-1"))
+    monkeypatch.setattr("cotacao_pvs.automacao.run_automation_v2", MagicMock(delay=fake_delay))
+    monkeypatch.setattr("cotacao_pvs.automacao.load_veiculos_referencia", lambda p: [
+        {"faixa_min": 0, "faixa_max": 11000, "tipo": "leve", "codigo_fipe": "001"},
+    ])
+
+    # Monkey-patch STEPS_PATH to read a custom steps.json with a top-level auth block.
+    auth_block = {"type": "form_login", "url": "x", "credentials_ref": "apvs_login", "selectors": {"user": "input", "pass": "input", "submit": "button"}, "success_assert": {"selector": ".ok", "timeout_ms": 5000}}
+    body_step = {"id": "click_x", "click": {"selector": "button"}}
+    fake_steps_json = {"auth": auth_block, "steps": [body_step]}
+    import cotacao_pvs.automacao as auto_mod
+    auto_mod.STEPS_PATH = tmp_path / "steps.json"
+    auto_mod.STEPS_PATH.write_text(json.dumps(fake_steps_json), encoding="utf-8")
+
+    _run(executar_cotacao_pvs(
+        veiculos_path=tmp_path / "veiculos.json",
+        credentials={"apvs_login": {"user": "x", "pass": "y"}},
+        supabase_key="sb-key",
+        estado="BA",
+        regioes={"capital": "Salvador"},
+        automation_name="cotacao_pvs_smoke",
+    ))
+
+    kwargs = fake_delay.call_args.kwargs
+    payload = kwargs["steps_payload"]
+    # First element is the auth envelope.
+    assert payload[0] == {"auth": auth_block}, f"expected auth envelope as first element, got {payload[0]}"
+    # Body steps follow.
+    assert payload[1] == body_step

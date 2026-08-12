@@ -16,7 +16,7 @@ with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 - Assertion step: `assert_text`
 - Extraction steps: `extract_text`, `extract_table`, `screenshot`
 - AI extraction step: `run_ai` (P2) — schema-typed extraction via OpenAI tool-calling
-- Code escape hatch: `run_python` (P5 subprocess sandbox — blocks `os`, `subprocess`, `importlib`, `ctypes`, `socket`, etc.)
+- Code escape hatch: `run_python` (P5 subprocess sandbox — blocks `os`, `subprocess`, `importlib`, `ctypes`, `socket`, `sys`, `builtins`, etc.; **best-effort** — see Threat Model in `app/automation/sandbox.py`)
 - Control flow: `for_each`, `if`
 - Auth block: `form_login`, `cookie_reuse`, `otp_via_telegram` (P5)
 - Credentials resolver: `cfg.*` settings + `NAVRUNNER_*` env vars

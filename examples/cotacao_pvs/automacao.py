@@ -76,6 +76,17 @@ async def executar_cotacao_pvs(
 
     steps_payload = json.loads((STEPS_PATH).read_text(encoding="utf-8"))
 
+    # The dispatcher (run_automation_v2) recognizes a top-level auth block
+    # when steps_payload[0] is {"auth": ...}. The cotacao_pvs steps.json puts
+    # auth at the top level alongside `steps`. Wrap it so the dispatcher sees
+    # the auth block as the first element, then the body steps.
+    body_steps = steps_payload.get("steps", [])
+    auth_block = steps_payload.get("auth")
+    payload_for_dispatcher = []
+    if auth_block:
+        payload_for_dispatcher.append({"auth": auth_block})
+    payload_for_dispatcher.extend(body_steps)
+
     dispatched = 0
     for combo in combos:
         inputs = {
@@ -87,7 +98,7 @@ async def executar_cotacao_pvs(
         }
         run_automation_v2.delay(
             automation_name=automation_name,
-            steps_payload=steps_payload["steps"],
+            steps_payload=payload_for_dispatcher,
             inputs=inputs,
         )
         dispatched += 1

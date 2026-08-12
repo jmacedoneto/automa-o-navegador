@@ -127,7 +127,7 @@ async def run_auth(page: Any, spec: AuthSpec, ctx: RunContext) -> None:
         await _run_form_login(page, spec, ctx)
         return
     if spec.type == "cookie_reuse":
-        await _run_cookie_reuse(page, spec)
+        await _run_cookie_reuse(page, spec, ctx)
         return
     if spec.type == "otp_via_telegram":
         await _run_otp_via_telegram(page, spec, ctx)
@@ -157,7 +157,7 @@ async def _run_form_login(page: Any, spec: AuthSpec, ctx: RunContext) -> None:
     await page.wait_for_selector(success_selector, timeout=success_timeout, state="visible")
 
 
-async def _run_cookie_reuse(page: Any, spec: AuthSpec) -> None:
+async def _run_cookie_reuse(page: Any, spec: AuthSpec, ctx: RunContext) -> None:
     # Playwright add_cookies accepts: name, value, domain/url, path, expires, httpOnly, secure, sameSite.
     cookies = [
         {k: v for k, v in c.items() if k in ("name", "value", "domain", "url", "path", "expires", "httpOnly", "secure", "sameSite")}
@@ -166,7 +166,7 @@ async def _run_cookie_reuse(page: Any, spec: AuthSpec) -> None:
     if cookies:
         await page.add_cookies(cookies)
     await page.goto(spec.url, timeout=30000, wait_until="domcontentloaded")
-    success_selector = interpolate(spec.success_assert["selector"], type("C", (), {"bindings": {}, "credentials": {}, "inputs": {}})())
+    success_selector = interpolate(spec.success_assert["selector"], ctx)
     success_timeout = int(spec.success_assert.get("timeout_ms", 5000))
     await page.wait_for_selector(success_selector, timeout=success_timeout, state="visible")
 
@@ -201,6 +201,6 @@ async def _run_otp_via_telegram(page: Any, spec: AuthSpec, ctx: RunContext) -> N
     # Submit.
     await page.click(spec.submit_selector, timeout=15000)
     # Wait for success.
-    success_selector = interpolate(spec.success_assert["selector"], type("Ctx", (), {"bindings": {}, "credentials": {}, "inputs": {}})())
+    success_selector = interpolate(spec.success_assert["selector"], ctx)
     success_timeout = int(spec.success_assert.get("timeout_ms", 5000))
     await page.wait_for_selector(success_selector, timeout=success_timeout, state="visible")
