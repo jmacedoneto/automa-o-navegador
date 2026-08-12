@@ -257,7 +257,7 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
     }).execute()
 
     from app.automation.credentials import resolve_credentials
-    from app.automation.runner import set_step_log_writer
+    from app.automation.runner_state import step_log_writer_scope
 
     credentials = resolve_credentials()
     endpoint = (settings.BROWSERLESS_URL or "").replace("http://", "ws://").replace("https://", "wss://")
@@ -272,7 +272,6 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
     step_logs: list[dict] = []
     def _writer(event: dict) -> None:
         step_logs.append(event)
-    set_step_log_writer(_writer)
 
     # Detect top-level auth block (first step might be auth)
     auth_spec: AuthSpec | None = None
@@ -316,56 +315,55 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
             # Audit failure is non-fatal.
             pass
 
-    try:
-        result = _run(runner.run_steps(steps=steps, inputs=inputs, credentials=credentials, auth=auth_spec))
-        _flush_step_logs()
-        error_msg = result.errors[0] if result.errors else None
-        db.table("automation_runs").update({
-            "status": result.status,
-            "finished_at": datetime.now(timezone.utc).isoformat(),
-            "bindings": result.bindings or inputs,
-            "error_message": error_msg,
-        }).eq("id", run_id).execute()
+    with step_log_writer_scope(_writer):
+        try:
+            result = _run(runner.run_steps(steps=steps, inputs=inputs, credentials=credentials, auth=auth_spec))
+            _flush_step_logs()
+            error_msg = result.errors[0] if result.errors else None
+            db.table("automation_runs").update({
+                "status": result.status,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "bindings": result.bindings or inputs,
+                "error_message": error_msg,
+            }).eq("id", run_id).execute()
 
-        # Fire WhatsApp alert on failure (best-effort).
-        if result.status == "failed" and result.errors:
-            first_error = result.errors[0]
-            step_id = first_error.split(":", 1)[0].strip()
-            err_msg = first_error.split(":", 1)[1].strip() if ":" in first_error else first_error
-            screenshot_url = result.screenshot_urls.get("on_fail") if result.screenshot_urls else None
+            # Fire WhatsApp alert on failure (best-effort).
+            if result.status == "failed" and result.errors:
+                first_error = result.errors[0]
+                step_id = first_error.split(":", 1)[0].strip()
+                err_msg = first_error.split(":", 1)[1].strip() if ":" in first_error else first_error
+                screenshot_url = result.screenshot_urls.get("on_fail") if result.screenshot_urls else None
+                try:
+                    _run(send_whatsapp_alert(
+                        run_id=run_id,
+                        automation_name=automation_name,
+                        step_id=step_id,
+                        error=err_msg,
+                        screenshot_url=screenshot_url,
+                    ))
+                except Exception:
+                    pass
+
+            return {"run_id": run_id, "status": result.status}
+        except Exception as e:
+            _flush_step_logs()
+            db.table("automation_runs").update({
+                "status": "failed",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "error_message": str(e),
+            }).eq("id", run_id).execute()
+
+            # Fire alert on dispatcher-level failure too.
             try:
                 _run(send_whatsapp_alert(
                     run_id=run_id,
                     automation_name=automation_name,
-                    step_id=step_id,
-                    error=err_msg,
-                    screenshot_url=screenshot_url,
+                    step_id="dispatcher",
+                    error=str(e),
                 ))
             except Exception:
                 pass
-
-        return {"run_id": run_id, "status": result.status}
-    except Exception as e:
-        _flush_step_logs()
-        db.table("automation_runs").update({
-            "status": "failed",
-            "finished_at": datetime.now(timezone.utc).isoformat(),
-            "error_message": str(e),
-        }).eq("id", run_id).execute()
-
-        # Fire alert on dispatcher-level failure too.
-        try:
-            _run(send_whatsapp_alert(
-                run_id=run_id,
-                automation_name=automation_name,
-                step_id="dispatcher",
-                error=str(e),
-            ))
-        except Exception:
-            pass
-        raise
-    finally:
-        set_step_log_writer(None)  # release the hook
+            raise
 
 
 @celery.task(name="app.workers.tasks.executar_cotacao_pvs", time_limit=21600, soft_time_limit=21570)

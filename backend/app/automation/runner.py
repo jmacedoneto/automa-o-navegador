@@ -14,38 +14,33 @@ from app.automation.interpreter import execute_step
 from app.automation.models import RunContext, Step
 from app.automation.storage import build_screenshot_key, upload_to_minio
 from app.automation.tracing import langfuse_span
+from app.automation.runner_state import (
+    emit_step_log as _emit_step_log,
+    step_log_writer_var,
+)
 
 
-# Module-level hook; the dispatcher sets this before a run to receive step events.
-# It is a plain function so we can keep the runner simple (no class hierarchy).
+# Backward-compat shim — pre-P5 callers (and existing tests) import
+# `set_step_log_writer` / `_step_log_writer` from this module. Internally,
+# writes go through a `contextvars.ContextVar` so concurrent runs in the
+# same worker process are isolated. Production code should use
+# `step_log_writer_scope` from runner_state directly.
 _step_log_writer: Callable[[dict], None] | None = None
 
 
 def set_step_log_writer(writer: Callable[[dict], None] | None) -> None:
-    """Wire (or clear) the step-log writer. Idempotent."""
+    """Wire (or clear) the step-log writer. Idempotent within a context.
+
+    DEPRECATED: prefer `step_log_writer_scope` from `runner_state`. This
+    shim remains so legacy imports keep working, and synchronizes both the
+    module global and the ContextVar for the current context.
+    """
     global _step_log_writer
     _step_log_writer = writer
-
-
-def _emit_step_log(run_id: str, step_id: str, status: str, **kwargs) -> None:
-    """Emit a step-log event if a writer is wired. Best-effort: never raises."""
-    if _step_log_writer is None:
-        return
-    try:
-        _step_log_writer(
-            run_id=run_id,
-            step_id=step_id,
-            status=status,
-            started_at=kwargs.get("started_at"),
-            finished_at=kwargs.get("finished_at"),
-            error=kwargs.get("error"),
-            bindings=kwargs.get("bindings", {}),
-            screenshot_keys=kwargs.get("screenshot_keys", []),
-            screenshot_urls=kwargs.get("screenshot_urls", {}),
-        )
-    except Exception:
-        # Audit must never fail the run.
-        pass
+    if writer is None:
+        step_log_writer_var.set(None)
+    else:
+        step_log_writer_var.set(writer)
 
 
 @dataclass
