@@ -87,14 +87,15 @@ class NavRunner:
         self,
         steps: Iterable[Step],
         inputs: dict[str, Any],
+        credentials: dict[str, Any] | None = None,
     ) -> RunResult:
         """P0 entry point: walk steps, capture per-step screenshots, return RunResult.
 
-        P0 deliberately does NOT touch Supabase, the real Langfuse SDK, or MinIO
-        upload — those land in P1.
+        `credentials` populates `RunContext.credentials` so the auth step can
+        resolve `credentials_ref` lookups. None (default) leaves it empty.
         """
         steps = list(steps)
-        ctx = RunContext(inputs=inputs, bindings={})
+        ctx = RunContext(inputs=inputs, bindings={}, credentials=credentials or {})
         result = RunResult(status="success", run_id=self.cfg.run_id)
         Path(self.cfg.screenshot_dir).mkdir(parents=True, exist_ok=True)
 
