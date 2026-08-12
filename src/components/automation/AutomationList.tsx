@@ -98,7 +98,7 @@ export function AutomationList({
           </Select>
         </div>
         <Button 
-          onClick={() => navigate('/automation/new')}
+          onClick={() => navigate('/create')}
           className="gap-2 gradient-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow"
         >
           <Plus className="h-4 w-4" />
@@ -121,7 +121,7 @@ export function AutomationList({
           {!search && filterStatus === 'all' && (
             <Button 
               className="mt-6 gap-2 gradient-primary text-primary-foreground shadow-lg shadow-primary/25"
-              onClick={() => navigate('/automation/new')}
+          onClick={() => navigate('/create')}
             >
               <Sparkles className="h-4 w-4" />
               Criar Primeira Automação
