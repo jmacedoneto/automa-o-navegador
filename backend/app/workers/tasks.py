@@ -3,11 +3,14 @@ Celery tasks for async execution and delivery.
 """
 import asyncio
 import json
+import uuid as _uuid
 from datetime import datetime, timezone
 
 from app.workers.celery_app import celery
 from app.core.database import get_db, get_setting
 from app.core.config import settings
+from app.automation.runner import NavRunner, NavRunnerConfig
+from app.automation.models import Step
 from app.services.browser_executor import execute_automation
 from app.services.computer_agent import run_agent
 from app.services.integrations.webhook import send_webhook
@@ -211,6 +214,52 @@ def run_automation(
             raise self.retry(exc=exc)
 
     return {"log_id": log_id, "status": "success"}
+
+
+# ── NavRunner P0 dispatcher ───────────────────────────────────────────────────
+
+@celery.task(name="app.workers.tasks.run_automation_v2")
+def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: dict | None = None):
+    """P0 dispatcher for NavRunner.
+
+    Inserts a row in `automation_runs`, runs the steps via NavRunner,
+    updates the row with final status. Wraps the async runner in
+    asyncio.run() — Celery worker is sync.
+    """
+    inputs = inputs or {}
+    run_id = str(_uuid.uuid4())
+    db = get_db()
+    db.table("automation_runs").insert({
+        "id": run_id,
+        "automation_name": automation_name,
+        "status": "running",
+        "bindings": inputs,
+    }).execute()
+
+    endpoint = (settings.BROWSERLESS_URL or "").replace("http://", "ws://").replace("https://", "wss://")
+    cfg = NavRunnerConfig(
+        browser_endpoint=endpoint,
+        run_id=run_id,
+        screenshot_dir=f"/tmp/navrunner-runs/{run_id}",
+    )
+    runner = NavRunner(cfg=cfg)
+    steps = [Step.from_dict(s) for s in steps_payload]
+
+    try:
+        result = asyncio.run(runner.run_steps(steps=steps, inputs=inputs))
+        db.table("automation_runs").update({
+            "status": result.status,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "bindings": result.bindings or inputs,
+        }).eq("id", run_id).execute()
+        return {"run_id": run_id, "status": result.status}
+    except Exception as e:
+        db.table("automation_runs").update({
+            "status": "failed",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "error_message": str(e),
+        }).eq("id", run_id).execute()
+        raise
 
 
 def _deliver_outputs(outputs: list[dict], result: dict, automation_name: str) -> list[str]:
