@@ -15,7 +15,7 @@ with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 - Interaction steps: `click`, `fill` (P0)
 - Assertion step: `assert_text` (P0)
 - Extraction steps: `extract_text`, `extract_table`, `screenshot` (P1a)
-- Code escape hatch: `run_python` (P1a)
+- Code escape hatch: `run_python` (P1a) — **NOT a sandbox in P1a**: code runs as the worker process user with full filesystem and network access via `__import__`. P5 wraps it in RestrictedPython / subprocess / seccomp.
 - Control flow: `for_each`, `if` (P1a)
 - Auth block: `form_login` (P1a)
 - Credentials resolver: `cfg.*` settings + `NAVRUNNER_*` env vars (P1a)
@@ -45,7 +45,7 @@ cd backend
 python3 -m pytest tests/automation -v
 ```
 
-40 tests, all passing.
+101 tests, all passing.
 
 ## Quick start
 

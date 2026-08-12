@@ -19,7 +19,7 @@ create table if not exists public.automation_steps_log (
     run_id uuid not null,
     step_id text not null,
     attempt int not null default 1,
-    status text not null check (status in ('ok', 'failed', 'skipped')),
+    status text not null check (status in ('running', 'ok', 'failed', 'skipped')),
     started_at timestamptz,
     finished_at timestamptz,
     error text,
