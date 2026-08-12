@@ -4,31 +4,39 @@ Declarative browser automation framework for the `autonavegador` stack. Replaces
 the brittle Python-per-automation pattern (see `cotacao_pvs/automacao_cotacao.py`)
 with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 
-## Status: P0 (skeleton)
+## Status: P1a (engine extensions)
 
-### Implemented
+### Implemented (P0 + P1a)
 
 - DSL parser + data types (`models.py` → `Step`, `RetryPolicy`, `RunContext`)
 - Bindings interpolation `{{input.x}}` / `{{binding}}` / `{{cfg.x}}` (`bindings.py`)
 - Retry with fixed/linear/exponential backoff (`retry.py`)
-- Step handlers: `goto`, `wait_for`, `click`, `fill`, `assert_text`
-  (`app/automation/steps/*`)
-- Interpreter dispatch table (`interpreter.py`) — adding a new step type is one line
-- MinIO key builder + URL formatter (`storage.py`) — actual upload deferred to P1
-- Langfuse noop span (`tracing.py`) — real SDK integration deferred to P1
-- Runner orchestrator (`runner.py`) with per-step screenshots + on_fail capture
-- Celery dispatcher `run_automation_v2` (writes audit row to `automation_runs`)
-- Supabase migration `automation_runs` (in `supabase/migrations/`)
-- Hello world example (`examples/hello_world/steps.json`) + offline e2e test
+- Navigation steps: `goto`, `wait_for` (P0)
+- Interaction steps: `click`, `fill` (P0)
+- Assertion step: `assert_text` (P0)
+- Extraction steps: `extract_text`, `extract_table`, `screenshot` (P1a)
+- Code escape hatch: `run_python` (P1a)
+- Control flow: `for_each`, `if` (P1a)
+- Auth block: `form_login` (P1a)
+- Credentials resolver: `cfg.*` settings + `NAVRUNNER_*` env vars (P1a)
+- Interpreter dispatch table (`interpreter.py`)
+- MinIO upload (when `MINIO_*` env set; local fallback otherwise) — P1a
+- Langfuse tracing (no-op when `LANGFUSE_*` missing; real SDK when set) — P1a
+- Runner orchestrator with per-step screenshots + on_fail capture + step-log emission
+- Celery dispatcher `run_automation_v2` (writes audit row + step logs + credentials)
+- Supabase migrations: `automation_runs`, `automation_versions`, `automation_steps_log`
+- Hello-world example + offline e2e test
 
 ### Deferred to later phases
 
-- `automation_versions`, `automation_steps_log` tables (P1)
-- `for_each`, `if`, `run_python`, `run_ai`, `extract_*` (P1/P2)
-- MinIO upload + screenshots in UI (P1)
-- Real Langfuse SDK + alert WhatsApp via Evolution (P2)
+- Cotação migration (P1b)
+- `run_ai` inline AI step (P2)
+- WhatsApp alerts via Evolution (P2)
 - Chrome extension record-replay (P3)
 - Run detail UI in `painel` (P4)
+- Auth strategies: `cookie_reuse`, `otp_via_telegram` (P5)
+- RestrictedPython sandbox for `run_python` (P5)
+- Per-run step_log_writer (instead of module global) when concurrency > 1 needed (P5)
 
 ## Tests
 
