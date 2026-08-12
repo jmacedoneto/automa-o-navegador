@@ -137,11 +137,12 @@
           },
           {
             "id": "extract_plano",
-            "run_python": {
-              "value": "from cotacao_pvs.ionic_helpers import extrair_menor_parcela; body = await page.evaluate('''() => { const pages = document.querySelectorAll('.ion-page:not(.ion-page-hidden)'); for (const p of pages) { if (p.innerText.includes('Planos') || p.innerText.includes('R$')) return p.innerText; } return ''; }'''); resultado = extrair_menor_parcela(body); bindings['resultado'] = resultado; bindings['combo_done'] = dict(combo); bindings['valor'] = resultado",
+            "run_ai": {
+              "schema": "ResultadoCotacao",
+              "instruction": "extraia o valor total (menor parcela em R$), prazo em meses, e status (ok ou rejeitado) do plano mais barato",
+              "bind": "resultado",
               "timeout_ms": 30000
-            },
-            "bind": "resultado"
+            }
           },
           {
             "id": "set_has_result",
@@ -159,7 +160,7 @@
                 {
                   "id": "patch_supabase",
                   "run_python": {
-                    "value": "import httpx; from urllib.parse import quote; row = {'valor_prata': bindings['resultado'], 'erro': ''}; url = f\"https://supabase.apvsiguatemi.net/rest/v1/cotacoes_fipe?faixa_min=eq.{quote(str(combo['faixa_min']))}&faixa_max=eq.{quote(str(combo['faixa_max']))}&tipo=eq.{quote(str(combo['tipo']))}&regiao=eq.{quote(str(combo['regiao']))}\"; async with httpx.AsyncClient(timeout=15) as client: r = await client.patch(url, headers={'apikey': inputs['supabase_key'], 'Authorization': f'Bearer {inputs[\"supabase_key\"]}', 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'}, json=row); assert r.status_code in (200, 204), f'supabase patch failed: {r.status_code} {r.text}'",
+                    "value": "import httpx; from urllib.parse import quote; r = bindings['resultado']; valor = r['valor_total'] if r and r.get('valor_total') is not None else 0; row = {'valor_prata': f\"R${valor:.2f}\", 'erro': ''}; url = f\"https://supabase.apvsiguatemi.net/rest/v1/cotacoes_fipe?faixa_min=eq.{quote(str(combo['faixa_min']))}&faixa_max=eq.{quote(str(combo['faixa_max']))}&tipo=eq.{quote(str(combo['tipo']))}&regiao=eq.{quote(str(combo['regiao']))}\"; async with httpx.AsyncClient(timeout=15) as client: r = await client.patch(url, headers={'apikey': inputs['supabase_key'], 'Authorization': f'Bearer {inputs[\"supabase_key\"]}', 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'}, json=row); assert r.status_code in (200, 204), f'supabase patch failed: {r.status_code} {r.text}'",
                     "timeout_ms": 30000
                   }
                 }

@@ -13,7 +13,7 @@ from playwright.async_api import Page
 from app.automation.models import RunContext, Step
 from app.automation.retry import with_retry
 from app.automation.steps import navigation, interaction, assertion
-from app.automation import control, extraction, run_python
+from app.automation import ai as _ai, control, extraction, run_python
 
 Handler = Callable[[Page, dict, RunContext], Awaitable]
 
@@ -27,6 +27,7 @@ _HANDLERS: dict[str, Handler] = {
     "extract_table": extraction.extract_table,
     "screenshot": extraction.screenshot,
     "run_python": run_python.run_python,
+    "run_ai": _ai.run_ai,
     # for_each / if need a visitor callback — handled separately below.
 }
 

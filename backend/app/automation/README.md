@@ -4,39 +4,39 @@ Declarative browser automation framework for the `autonavegador` stack. Replaces
 the brittle Python-per-automation pattern (see `cotacao_pvs/automacao_cotacao.py`)
 with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 
-## Status: P1a (engine extensions)
+## Status: P2 (run_ai + Evolution alerts)
 
-### Implemented (P0 + P1a)
+### Implemented (P0 + P1a + P1b + P2)
 
 - DSL parser + data types (`models.py` → `Step`, `RetryPolicy`, `RunContext`)
 - Bindings interpolation `{{input.x}}` / `{{binding}}` / `{{cfg.x}}` (`bindings.py`)
 - Retry with fixed/linear/exponential backoff (`retry.py`)
-- Navigation steps: `goto`, `wait_for` (P0)
-- Interaction steps: `click`, `fill` (P0)
-- Assertion step: `assert_text` (P0)
-- Extraction steps: `extract_text`, `extract_table`, `screenshot` (P1a)
-- Code escape hatch: `run_python` (P1a) — **NOT a sandbox in P1a**: code runs as the worker process user with full filesystem and network access via `__import__`. P5 wraps it in RestrictedPython / subprocess / seccomp.
-- Control flow: `for_each`, `if` (P1a)
-- Auth block: `form_login` (P1a)
-- Credentials resolver: `cfg.*` settings + `NAVRUNNER_*` env vars (P1a)
-- Interpreter dispatch table (`interpreter.py`)
-- MinIO upload (when `MINIO_*` env set; local fallback otherwise) — P1a
-- Langfuse tracing (no-op when `LANGFUSE_*` missing; real SDK when set) — P1a
+- Navigation steps: `goto`, `wait_for`
+- Interaction steps: `click`, `fill`
+- Assertion step: `assert_text`
+- Extraction steps: `extract_text`, `extract_table`, `screenshot`
+- AI extraction step: `run_ai` (P2) — schema-typed extraction via OpenAI tool-calling
+- Code escape hatch: `run_python` (NOT a sandbox in P2 — P5 wraps it)
+- Control flow: `for_each`, `if`
+- Auth block: `form_login`
+- Credentials resolver: `cfg.*` settings + `NAVRUNNER_*` env vars
+- Interpreter dispatch table
+- MinIO upload (best-effort; local fallback)
+- Langfuse tracing (real SDK when env set; noop otherwise)
 - Runner orchestrator with per-step screenshots + on_fail capture + step-log emission
-- Celery dispatcher `run_automation_v2` (writes audit row + step logs + credentials)
+- Celery dispatcher `run_automation_v2` with credentials + step logs + WhatsApp alert on failure (P2)
+- Pydantic schema registry (`schemas/`) with `ResultadoCotacao` (P2)
+- WhatsApp alerts via Evolution API on failed runs (P2, only when `whatsapp_alert` configured)
+- Cotação PVS example migrated to DSL (`examples/cotacao_pvs/`) — uses `run_ai` for plan extraction (P2)
 - Supabase migrations: `automation_runs`, `automation_versions`, `automation_steps_log`
-- Hello-world example + offline e2e test
 
 ### Deferred to later phases
 
-- Cotação migration (P1b)
-- `run_ai` inline AI step (P2)
-- WhatsApp alerts via Evolution (P2)
 - Chrome extension record-replay (P3)
 - Run detail UI in `painel` (P4)
-- Auth strategies: `cookie_reuse`, `otp_via_telegram` (P5)
 - RestrictedPython sandbox for `run_python` (P5)
-- Per-run step_log_writer (instead of module global) when concurrency > 1 needed (P5)
+- Per-run `step_log_writer` (instead of module global) when concurrency > 1 needed (P5)
+- Auth strategies: `cookie_reuse`, `otp_via_telegram` (P5)
 
 ## Tests
 

@@ -8,9 +8,13 @@ from app.automation.auth import parse_auth, run_auth
 from app.automation.credentials import resolve_credentials
 from app.automation.control import run_for_each, run_if
 from app.automation.run_python import run_python
+from app.automation.ai import run_ai
 from app.automation.extraction import extract_text, extract_table, screenshot
 from app.automation.storage import upload_to_minio, _minio_configured
 from app.automation.tracing import langfuse_span
+from app.automation.alerts import send_whatsapp_alert, build_failure_alert_text
+from app.automation.schemas import get_schema, list_schemas
+from app.automation.schemas.cotacao_pvs import ResultadoCotacao
 
 __all__ = [
     # Core data types
@@ -27,10 +31,16 @@ __all__ = [
     "run_for_each", "run_if",
     # Code escape hatch
     "run_python",
+    # AI extraction (P2)
+    "run_ai",
     # Extraction steps
     "extract_text", "extract_table", "screenshot",
     # Storage (MinIO upload + local fallback)
     "upload_to_minio", "_minio_configured",
     # Tracing (no-op until LANGFUSE_* env set)
     "langfuse_span",
+    # WhatsApp alerts via Evolution API (P2)
+    "send_whatsapp_alert", "build_failure_alert_text",
+    # Pydantic schema registry (P2)
+    "get_schema", "list_schemas", "ResultadoCotacao",
 ]

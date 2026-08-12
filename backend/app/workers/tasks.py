@@ -13,6 +13,7 @@ from app.core.database import get_db, get_setting
 from app.core.config import settings
 from app.automation.runner import NavRunner, NavRunnerConfig
 from app.automation.models import Step
+from app.automation.alerts import send_whatsapp_alert
 from app.automation.credentials import resolve_credentials
 from app.services.browser_executor import execute_automation
 from app.services.computer_agent import run_agent
@@ -308,6 +309,24 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
             "bindings": result.bindings or inputs,
             "error_message": error_msg,
         }).eq("id", run_id).execute()
+
+        # Fire WhatsApp alert on failure (best-effort).
+        if result.status == "failed" and result.errors:
+            first_error = result.errors[0]
+            step_id = first_error.split(":", 1)[0].strip()
+            err_msg = first_error.split(":", 1)[1].strip() if ":" in first_error else first_error
+            screenshot_url = result.screenshot_urls.get("on_fail") if result.screenshot_urls else None
+            try:
+                _run(send_whatsapp_alert(
+                    run_id=run_id,
+                    automation_name=automation_name,
+                    step_id=step_id,
+                    error=err_msg,
+                    screenshot_url=screenshot_url,
+                ))
+            except Exception:
+                pass
+
         return {"run_id": run_id, "status": result.status}
     except Exception as e:
         _flush_step_logs()
@@ -316,6 +335,17 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "error_message": str(e),
         }).eq("id", run_id).execute()
+
+        # Fire alert on dispatcher-level failure too.
+        try:
+            _run(send_whatsapp_alert(
+                run_id=run_id,
+                automation_name=automation_name,
+                step_id="dispatcher",
+                error=str(e),
+            ))
+        except Exception:
+            pass
         raise
     finally:
         set_step_log_writer(None)  # release the hook
