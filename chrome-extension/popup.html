@@ -70,6 +70,9 @@
     input[type="url"]:focus, input[type="text"]:focus { outline: 1px solid #8b5cf6; }
 
     @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+    .btn-secondary { background: #f3f4f6; color: #111; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-left: 6px; }
+    .btn-secondary:hover { background: #e5e7eb; }
   </style>
 </head>
 <body>
@@ -93,6 +96,7 @@
     <button id="stopBtn"  class="btn btn-stop" style="display:none">⏹ Parar Gravação</button>
     <button id="sendBtn"  class="btn btn-send"   style="display:none">⬆ Enviar para AutoPilot</button>
     <button id="exportBtn"class="btn btn-export" style="display:none">⬇ Exportar JSON</button>
+    <button id="exportTraceBtn" class="btn-secondary">Exportar Trace (NavRunner)</button>
     <button id="clearBtn" class="btn btn-clear"  style="display:none">✕ Limpar todos os passos</button>
   </div>
 
@@ -116,6 +120,8 @@
     </div>
   </div>
 
+  <script src="trace-builder.js"></script>
+  <script src="recorder.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
