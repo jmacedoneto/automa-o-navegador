@@ -1,20 +1,45 @@
-"""Core data types for NavRunner DSL."""
+"""Core data types for NavRunner DSL.
+
+Step actions live in a single registry (`_ACTIONS`). Each entry maps the
+action name to the canonical param key for bare-string payloads. Actions
+whose `default_key` is None MUST receive a dict payload (e.g. `for_each`,
+`if`, `run_python`, `run_ai`).
+"""
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
-# When a step's action is given a bare string, wrap it under a semantic key.
-# Example: `{"goto": "https://x"}` -> params = {"url": "https://x"}.
-_BARE_STRING_KEYS: dict[str, str] = {
+# Single source of truth for step actions.
+# Value = canonical param key when a bare string is given. None = dict required.
+_ACTIONS: dict[str, str | None] = {
     "goto": "url",
     "click": "selector",
     "wait_for": "selector",
     "assert": "text",
+    "fill": "selector",
+    "extract_text": "selector",
+    "extract_table": "selector",
+    "screenshot": None,
+    "reload": None,
+    "go_back": None,
+    "run_ai": None,
+    "run_python": None,
+    "for_each": None,
+    "if": None,
 }
+
+_META_KEYS = {"id", "retry", "bind", "timeout_ms", "pre_hook", "post_hook"}
 
 
 @dataclass
 class RetryPolicy:
+    """Per-step retry configuration.
+
+    - ``attempts``: total tries (1 = no retry).
+    - ``backoff``: "fixed" | "linear" | "exponential".
+    - ``on_fail``: "abort" | "skip_continue" | "alert" | "run_block:<id>".
+    - ``retry_if``: "selector_missing" | "timeout" | "any_error".
+    """
     attempts: int = 1
     backoff: str = "fixed"
     initial_delay_ms: int = 1000
@@ -23,7 +48,7 @@ class RetryPolicy:
     retry_if: str = "any_error"
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> Optional["RetryPolicy"]:
+    def from_dict(cls, d: dict[str, Any] | None) -> "RetryPolicy | None":
         if d is None:
             return None
         return cls(**{k: d[k] for k in d if k in cls.__dataclass_fields__})
@@ -31,28 +56,35 @@ class RetryPolicy:
 
 @dataclass
 class Step:
+    """A single declarative step parsed from `steps.json`.
+
+    `bind` (when set) names the slot in `RunContext.bindings` where the
+    step's extracted value is stored.
+    """
     id: str
     action: str
     params: dict[str, Any]
-    retry: Optional[RetryPolicy] = None
-    bind: Optional[str] = None
+    retry: RetryPolicy | None = None
+    bind: str | None = None
     timeout_ms: int = 30000
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "Step":
-        ACTION_KEYS = {"goto", "click", "fill", "wait_for", "assert", "run_ai",
-                       "run_python", "for_each", "if", "reload", "go_back",
-                       "extract_text", "extract_table", "screenshot"}
-        META_KEYS = {"id", "retry", "bind", "timeout_ms", "pre_hook", "post_hook"}
-        meta = {k: raw[k] for k in META_KEYS if k in raw}
-        action_keys = [k for k in raw if k in ACTION_KEYS]
+        if raw.get("id") is None:
+            raise ValueError(f"Step missing required 'id' key: {raw}")
+        meta = {k: raw[k] for k in _META_KEYS if k in raw}
+        action_keys = [k for k in raw if k in _ACTIONS]
         if len(action_keys) != 1:
             raise ValueError(f"Step must have exactly one action key, got {action_keys} in {raw}")
         action = action_keys[0]
         params = raw[action]
-        if not isinstance(params, dict):
-            key = _BARE_STRING_KEYS.get(action, "value")
-            params = {key: params}
+        default_key = _ACTIONS[action]
+        if default_key is None and not isinstance(params, dict):
+            raise ValueError(
+                f"Action {action!r} requires a dict payload, got {type(params).__name__}"
+            )
+        if default_key is not None and not isinstance(params, dict):
+            params = {default_key: params}
         if "retry" in raw:
             meta["retry"] = RetryPolicy.from_dict(raw["retry"])
         return cls(action=action, params=params, **meta)
@@ -60,6 +92,13 @@ class Step:
 
 @dataclass
 class RunContext:
+    """Runtime context for an automation run.
+
+    Three scopes resolved by `get(dotted)`:
+    - ``input.X`` -> ``inputs``
+    - ``cfg.X``   -> ``credentials``  (DSL head is "cfg" to match user-facing markup)
+    - bare ``name`` or ``name.sub``  -> ``bindings``
+    """
     inputs: dict[str, Any] = field(default_factory=dict)
     bindings: dict[str, Any] = field(default_factory=dict)
     credentials: dict[str, Any] = field(default_factory=dict)
