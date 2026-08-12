@@ -39,7 +39,7 @@ def test_run_automation_v2_fires_alert_on_failure(monkeypatch):
     fake_result.screenshot_keys = []
     fake_result.screenshot_urls = {}
 
-    async def fake_run_steps(steps, inputs, credentials=None):
+    async def fake_run_steps(steps, inputs, credentials=None, auth=None):
         return fake_result
 
     fake_runner = MagicMock()

@@ -15,6 +15,7 @@ from app.automation.runner import NavRunner, NavRunnerConfig
 from app.automation.models import Step
 from app.automation.alerts import send_whatsapp_alert
 from app.automation.credentials import resolve_credentials
+from app.automation.auth import parse_auth, AuthSpec
 from app.services.browser_executor import execute_automation
 from app.services.computer_agent import run_agent
 from app.services.integrations.webhook import send_webhook
@@ -273,6 +274,22 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
         step_logs.append(event)
     set_step_log_writer(_writer)
 
+    # Detect top-level auth block (first step might be auth)
+    auth_spec: AuthSpec | None = None
+    if steps_payload and isinstance(steps_payload[0], dict) and "auth" in steps_payload[0]:
+        auth_block = steps_payload[0]["auth"]
+        # Strip the auth block from steps_payload — runner doesn't see it.
+        steps_payload = steps_payload[1:]
+        try:
+            auth_spec = parse_auth(auth_block)
+        except ValueError as e:
+            db.table("automation_runs").update({
+                "status": "failed",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "error_message": f"auth block parse error: {e}",
+            }).eq("id", run_id).execute()
+            raise
+
     steps = [Step.from_dict(s) for s in steps_payload]
 
     def _flush_step_logs() -> None:
@@ -300,7 +317,7 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
             pass
 
     try:
-        result = _run(runner.run_steps(steps=steps, inputs=inputs, credentials=credentials))
+        result = _run(runner.run_steps(steps=steps, inputs=inputs, credentials=credentials, auth=auth_spec))
         _flush_step_logs()
         error_msg = result.errors[0] if result.errors else None
         db.table("automation_runs").update({
