@@ -95,9 +95,11 @@ class RunContext:
     """Runtime context for an automation run.
 
     Three scopes resolved by `get(dotted)`:
-    - ``input.X`` -> ``inputs``
-    - ``cfg.X``   -> ``credentials``  (DSL head is "cfg" to match user-facing markup)
-    - bare ``name`` or ``name.sub``  -> ``bindings``
+    - ``input.X``         -> ``inputs``
+    - ``cfg.X``           -> ``credentials``  (DSL head is "cfg" to match user-facing markup)
+    - bare ``name`` / ``name.sub`` -> ``inputs`` first, then ``bindings``
+      (so a constant passed via `inputs={"a": 1}` is reachable as `{{a}}`
+      without forcing callers to namespace every reference).
     """
     inputs: dict[str, Any] = field(default_factory=dict)
     bindings: dict[str, Any] = field(default_factory=dict)
@@ -113,6 +115,11 @@ class RunContext:
             return _walk(self.inputs, rest, default)
         if head == "cfg":
             return _walk(self.credentials, rest, default)
+        # Bare name: try inputs first, then bindings.
+        if head in self.inputs:
+            v = _walk(self.inputs, [head, *rest], None)
+            if v is not None:
+                return v
         return _walk(self.bindings, [head, *rest], default)
 
 

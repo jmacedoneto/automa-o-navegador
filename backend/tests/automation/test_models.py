@@ -34,3 +34,17 @@ def test_run_context_nested_get():
     ctx = RunContext(inputs={"cliente": {"nome": "Ana"}}, bindings={"r": {"valor": 100}})
     assert ctx.get("input.cliente.nome") == "Ana"
     assert ctx.get("r.valor") == 100
+
+
+def test_run_context_bare_name_falls_back_to_inputs():
+    """Bare `{{name}}` resolves to inputs first, then bindings."""
+    ctx = RunContext(inputs={"a": 1}, bindings={"b": 2})
+    assert ctx.get("a") == 1      # inputs
+    assert ctx.get("b") == 2      # bindings
+    assert ctx.get("missing") is None  # default
+
+
+def test_run_context_bare_name_inputs_wins_over_bindings():
+    """If the same key exists in both inputs and bindings, inputs wins."""
+    ctx = RunContext(inputs={"x": "from-inputs"}, bindings={"x": "from-bindings"})
+    assert ctx.get("x") == "from-inputs"
