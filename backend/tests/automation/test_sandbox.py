@@ -15,8 +15,9 @@ def test_sandbox_executes_simple_expression():
 def test_sandbox_executes_multi_stmt():
     code = """
 total = 0
-for i in range(5):
+for i in range(6):
     total += i
+result = total
 """
     result = _run(run_sandboxed(code, {}))
     assert result == 15
