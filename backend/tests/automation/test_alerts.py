@@ -75,11 +75,13 @@ def test_send_whatsapp_alert_sends_message(monkeypatch):
         automation_name="cotacao_pvs",
         step_id="extract",
         error="boom",
+        screenshot_url="https://s3/shot.png",
     ))
     fake_send.assert_called_once()
     args = fake_send.call_args.args
     assert args[0]["to"] == "5511999999999"
     assert "cotacao_pvs" in args[1]
+    assert "https://s3/shot.png" in args[1]
 
 
 def test_send_whatsapp_alert_silent_when_unconfigured(monkeypatch):

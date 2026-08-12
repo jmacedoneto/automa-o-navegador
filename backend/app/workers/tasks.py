@@ -315,12 +315,14 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
             first_error = result.errors[0]
             step_id = first_error.split(":", 1)[0].strip()
             err_msg = first_error.split(":", 1)[1].strip() if ":" in first_error else first_error
+            screenshot_url = result.screenshot_urls.get("on_fail") if result.screenshot_urls else None
             try:
                 _run(send_whatsapp_alert(
                     run_id=run_id,
                     automation_name=automation_name,
                     step_id=step_id,
                     error=err_msg,
+                    screenshot_url=screenshot_url,
                 ))
             except Exception:
                 pass

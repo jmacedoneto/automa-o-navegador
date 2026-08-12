@@ -28,6 +28,12 @@ _MAX_HTML_CHARS = 50_000
 _OPENAI_CLIENT: AsyncOpenAI | None = None
 
 
+def _reset_openai_client() -> None:
+    """Test helper — clears the singleton so the next call rebuilds it."""
+    global _OPENAI_CLIENT
+    _OPENAI_CLIENT = None
+
+
 def _get_openai_client() -> AsyncOpenAI:
     """Lazily create a singleton OpenAI client."""
     global _OPENAI_CLIENT
@@ -88,7 +94,7 @@ async def run_ai(page: Any, params: dict[str, Any], ctx: RunContext) -> dict[str
                 "content": (
                     "You extract structured data from HTML pages. "
                     "Use the tool function to return the parsed value. "
-                    "Match the schema EXACTLY - all required fields, correct types."
+                    "Match the schema EXACTLY — all required fields, correct types."
                 ),
             },
             {
@@ -97,9 +103,8 @@ async def run_ai(page: Any, params: dict[str, Any], ctx: RunContext) -> dict[str
             },
         ],
         tools=[tool],
-        # Force the extraction tool so the model cannot answer in prose.
-        tool_choice={"type": "function", "function": {"name": tool_name}},
-        max_tokens=max_tokens,
+        tool_choice={"type": "function", "function": {"name": f"extract_{schema_name}"}},
+        max_completion_tokens=max_tokens,
     )
 
     msg = response.choices[0].message
