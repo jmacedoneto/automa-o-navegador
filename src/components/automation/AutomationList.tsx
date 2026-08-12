@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Automation, Schedule } from "@/types/automation";
 import { AutomationCard } from "./AutomationCard";
-import { AIPlannerCard } from "./AIPlannerCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -70,7 +69,11 @@ export function AutomationList({
 
   return (
     <div className="space-y-6">
-      <AIPlannerCard />
+      <div className="flex justify-end">
+        <Button onClick={() => navigate("/create")}>
+          <Plus className="h-4 w-4 mr-2" /> Nova automação
+        </Button>
+      </div>
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex flex-1 gap-2 w-full sm:w-auto">
           <div className="relative flex-1 max-w-sm">
