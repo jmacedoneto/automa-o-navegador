@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import Dashboard from "./pages/Dashboard";
 import AutomationEditor from "./pages/AutomationEditor";
+import { CreateAutomationPage } from "./pages/CreateAutomation";
 import Settings from "./pages/Settings";
 import ExecutionLogs from "./pages/ExecutionLogs";
 import Cobranca from "./pages/Cobranca";
@@ -117,6 +118,7 @@ const App = () => (
                 <Route path="/logs" element={<ExecutionLogs />} />
                 <Route path="/cobranca" element={<Cobranca />} />
                 <Route path="/automation/new" element={<AutomationEditor />} />
+                <Route path="/create" element={<CreateAutomationPage />} />
                 <Route path="/automation/:id" element={<AutomationEditor />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

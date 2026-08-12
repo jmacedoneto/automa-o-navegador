@@ -35,6 +35,7 @@ export function ExtensionRecorder({ isOpen, onClose, onStepsReady, initialUrl = 
   const [recording, setRecording] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepsEndRef = useRef<HTMLDivElement>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   // Auto-scroll
   useEffect(() => { stepsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
@@ -47,10 +48,25 @@ export function ExtensionRecorder({ isOpen, onClose, onStepsReady, initialUrl = 
         fetch(`${API_BASE}/automations/ext-session/${sessionId}`, { method: "DELETE" }).catch(() => {});
       }
       setSessionId(null);
+      sessionIdRef.current = null;
       setSteps([]);
       setRecording(false);
     }
   }, [isOpen]);
+
+  // Cleanup on unmount — stops the polling loop and deletes the backend
+  // session regardless of `isOpen` state. Without this, leaving the
+  // Record tab via tab-switch unmounts the component while polling is
+  // still active and leaks a backend session.
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      // Capture sessionId via ref to avoid stale closure.
+      if (sessionIdRef.current) {
+        fetch(`${API_BASE}/automations/ext-session/${sessionIdRef.current}`, { method: "DELETE" }).catch(() => {});
+      }
+    };
+  }, []);
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -73,6 +89,7 @@ export function ExtensionRecorder({ isOpen, onClose, onStepsReady, initialUrl = 
     const res = await fetch(`${API_BASE}/automations/ext-session/create`, { method: "POST" });
     const { session_id } = await res.json();
     setSessionId(session_id);
+    sessionIdRef.current = session_id;
     setSteps([]);
     setRecording(true);
     startPolling(session_id);
