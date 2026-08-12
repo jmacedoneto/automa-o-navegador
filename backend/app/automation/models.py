@@ -16,7 +16,7 @@ _ACTIONS: dict[str, str | None] = {
     "click": "selector",
     "wait_for": "selector",
     "assert": "text",
-    "fill": "selector",
+    "fill": None,                    # fill requires {selector: value, ...} (dict)
     "extract_text": "selector",
     "extract_table": "selector",
     "screenshot": None,
@@ -67,6 +67,9 @@ class Step:
     retry: RetryPolicy | None = None
     bind: str | None = None
     timeout_ms: int = 30000
+    # Forward-compat stubs. P0 ignores them; P1 will run them around the action.
+    pre_hook: Any = None
+    post_hook: Any = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "Step":

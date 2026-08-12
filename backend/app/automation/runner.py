@@ -76,12 +76,9 @@ class NavRunner:
                         # P0 default: on_fail=abort — stop on first failure.
                         # Future: honor step.retry.on_fail (skip_continue, alert, ...).
                         break
-            if not result.errors:
-                result.status = "success"
-            elif all(any(e.startswith(step.id + ":") for e in result.errors) for step in steps):
-                result.status = "failed"
-            else:
-                result.status = "partial"
+            # P0 honors only `on_fail=abort`. The "partial" branch lands in P1
+            # once RetryPolicy.on_fail actually drives step-level continue/stop.
+            result.status = "success" if not result.errors else "failed"
         finally:
             await browser.close()
             await pw.stop()

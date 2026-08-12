@@ -218,13 +218,13 @@ def run_automation(
 
 # ── NavRunner P0 dispatcher ───────────────────────────────────────────────────
 
-@celery.task(name="app.workers.tasks.run_automation_v2")
+@celery.task(name="app.workers.tasks.run_automation_v2", time_limit=9000, soft_time_limit=8970)
 def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: dict | None = None):
     """P0 dispatcher for NavRunner.
 
     Inserts a row in `automation_runs`, runs the steps via NavRunner,
-    updates the row with final status. Wraps the async runner in
-    asyncio.run() — Celery worker is sync.
+    updates the row with final status. Uses the module-level `_run` helper
+    to drive the async runner from a sync Celery worker.
     """
     inputs = inputs or {}
     run_id = str(_uuid.uuid4())
@@ -246,11 +246,13 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
     steps = [Step.from_dict(s) for s in steps_payload]
 
     try:
-        result = asyncio.run(runner.run_steps(steps=steps, inputs=inputs))
+        result = _run(runner.run_steps(steps=steps, inputs=inputs))
+        error_msg = result.errors[0] if result.errors else None
         db.table("automation_runs").update({
             "status": result.status,
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "bindings": result.bindings or inputs,
+            "error_message": error_msg,
         }).eq("id", run_id).execute()
         return {"run_id": run_id, "status": result.status}
     except Exception as e:
