@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterable
 
 from playwright.async_api import async_playwright, Page
 
+from app.automation.auth import AuthSpec, run_auth
 from app.automation.interpreter import execute_step
 from app.automation.models import RunContext, Step
 from app.automation.storage import build_screenshot_key, upload_to_minio
@@ -83,6 +84,7 @@ class NavRunner:
         steps: Iterable[Step],
         inputs: dict[str, Any],
         credentials: dict[str, Any] | None = None,
+        auth: "AuthSpec | None" = None,
     ) -> RunResult:
         """P0 entry point: walk steps, capture per-step screenshots, return RunResult.
 
@@ -100,6 +102,8 @@ class NavRunner:
         page = await browser.new_page()
         self._page = page
         result.page = page
+        if auth is not None:
+            await run_auth(page, spec=auth, ctx=ctx)
         try:
             with langfuse_span("navrunner.run", run_id=self.cfg.run_id, steps=len(steps)):
                 for step in steps:

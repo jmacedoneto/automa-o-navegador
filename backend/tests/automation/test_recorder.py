@@ -54,26 +54,24 @@ def test_parse_trace_file_raises_on_invalid_json(tmp_path):
 def test_steps_from_trace_basic_actions():
     out = steps_from_trace(SAMPLE_TRACE)
     steps = out["steps"]
-    # The login block is consumed (replaced by a single login_block step).
     assert len(steps) >= 1
-    # First step is the login block.
-    assert "login_block" in steps[0]
+    # The login block is now top-level, not a step.
+    assert "login_block" not in steps[0]
 
 
 def test_steps_from_trace_detects_login_block():
     """The first sequence of navigate -> click(button with CONSULTOR) -> 2 fills ->
     click(button Entrar) -> wait_for dashboard is detected as form_login auth."""
-    steps = steps_from_trace(SAMPLE_TRACE)["steps"]
-    auth_steps = [s for s in steps if "login_block" in s]
-    assert len(auth_steps) == 1
-    auth = auth_steps[0]["login_block"]
+    out = steps_from_trace(SAMPLE_TRACE)
+    assert "auth" in out
+    auth = out["auth"]
     assert auth["credentials_ref"].startswith("apvs_login")
     assert auth["success_assert"]["selector"] == ".dashboard"
 
 
 def test_steps_from_trace_includes_wait_for():
-    steps = steps_from_trace(SAMPLE_TRACE)["steps"]
-    wait_steps = [s for s in steps if "wait_for" in s]
+    out = steps_from_trace(SAMPLE_TRACE)
+    wait_steps = [s for s in out["steps"] if "wait_for" in s]
     assert any(w["id"].startswith("wait_") for w in wait_steps)
 
 

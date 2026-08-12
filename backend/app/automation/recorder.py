@@ -249,17 +249,15 @@ _DEFAULT_NOTES: list[str] = [
 
 def steps_from_trace(payload: dict) -> dict[str, Any]:
     actions = payload.get("actions") or []
-    login_block, remaining = _detect_login_block(actions)
+    auth_block, remaining = _detect_login_block(actions)
 
     steps: list[dict[str, Any]] = []
     idx = 0
     notes: list[str] = list(_DEFAULT_NOTES)
-    if login_block is not None:
-        steps.append({
-            "id": "login_block",
-            "login_block": login_block,
-        })
+    if auth_block is not None:
+        # Don't add login_block as a step anymore — emit top-level auth.
         idx += 1
+        # (auth handled below in the return dict)
     unknown_count = 0
     for action in remaining:
         built = _build_step(action, idx)
@@ -275,9 +273,12 @@ def steps_from_trace(payload: dict) -> dict[str, Any]:
         )
     steps = _group_consecutive_fills(steps)
 
-    return {
+    out: dict[str, Any] = {
         "automation_name": _automation_name_from_title_or_url(payload),
         "version": 1,
         "steps": steps,
         "notes": notes,
     }
+    if auth_block is not None:
+        out["auth"] = auth_block
+    return out
