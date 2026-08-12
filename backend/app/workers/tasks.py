@@ -219,12 +219,11 @@ def run_automation(
 # ── NavRunner P0 dispatcher ───────────────────────────────────────────────────
 
 @celery.task(name="app.workers.tasks.run_automation_v2", time_limit=9000, soft_time_limit=8970)
-def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: dict | None = None):
-    """P0 dispatcher for NavRunner.
+def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: dict | None = None, version_id: str | None = None):
+    """P1a dispatcher.
 
-    Inserts a row in `automation_runs`, runs the steps via NavRunner,
-    updates the row with final status. Uses the module-level `_run` helper
-    to drive the async runner from a sync Celery worker.
+    Resolves credentials, wires the step-log writer, runs the steps
+    via NavRunner, persists the run + step logs to Supabase.
     """
     inputs = inputs or {}
     run_id = str(_uuid.uuid4())
@@ -232,10 +231,15 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
     db.table("automation_runs").insert({
         "id": run_id,
         "automation_name": automation_name,
+        "version_id": version_id,
         "status": "running",
         "bindings": inputs,
     }).execute()
 
+    from app.automation.credentials import resolve_credentials
+    from app.automation.runner import set_step_log_writer
+
+    credentials = resolve_credentials()
     endpoint = (settings.BROWSERLESS_URL or "").replace("http://", "ws://").replace("https://", "wss://")
     cfg = NavRunnerConfig(
         browser_endpoint=endpoint,
@@ -243,10 +247,42 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
         screenshot_dir=f"/tmp/navrunner-runs/{run_id}",
     )
     runner = NavRunner(cfg=cfg)
+
+    # Capture step events in a list; bulk-insert after the run.
+    step_logs: list[dict] = []
+    def _writer(event: dict) -> None:
+        step_logs.append(event)
+    set_step_log_writer(_writer)
+
     steps = [Step.from_dict(s) for s in steps_payload]
 
+    def _flush_step_logs() -> None:
+        if not step_logs:
+            return
+        rows = [
+            {
+                "run_id": e["run_id"],
+                "step_id": e["step_id"],
+                "attempt": 1,
+                "status": e["status"],
+                "started_at": e.get("started_at"),
+                "finished_at": e.get("finished_at"),
+                "error": e.get("error"),
+                "bindings": e.get("bindings", {}),
+                "screenshot_keys": e.get("screenshot_keys", []),
+                "screenshot_urls": e.get("screenshot_urls", {}),
+            }
+            for e in step_logs
+        ]
+        try:
+            db.table("automation_steps_log").insert(rows).execute()
+        except Exception:
+            # Audit failure is non-fatal.
+            pass
+
     try:
-        result = _run(runner.run_steps(steps=steps, inputs=inputs))
+        result = _run(runner.run_steps(steps=steps, inputs=inputs, credentials=credentials))
+        _flush_step_logs()
         error_msg = result.errors[0] if result.errors else None
         db.table("automation_runs").update({
             "status": result.status,
@@ -256,12 +292,15 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
         }).eq("id", run_id).execute()
         return {"run_id": run_id, "status": result.status}
     except Exception as e:
+        _flush_step_logs()
         db.table("automation_runs").update({
             "status": "failed",
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "error_message": str(e),
         }).eq("id", run_id).execute()
         raise
+    finally:
+        set_step_log_writer(None)  # release the hook
 
 
 def _deliver_outputs(outputs: list[dict], result: dict, automation_name: str) -> list[str]:
