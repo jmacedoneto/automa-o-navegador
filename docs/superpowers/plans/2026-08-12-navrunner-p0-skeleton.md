@@ -720,17 +720,21 @@ from app.automation.models import RunContext
 
 
 class _FakeLocator:
-    def __init__(self, text):
-        self.text = text
-        self.visible = True
+    def __init__(self, text, *, visible=True):
+        self._text = text
+        self._visible = visible
+
+    @property
+    def first(self):
+        return self
 
     async def wait_for(self, **kwargs):
-        if not self.visible:
-            raise TimeoutError("not visible")
+        if not self._visible:
+            raise TimeoutError(f"wait_for timed out; kwargs={kwargs}")
         return self
 
     async def text_content(self):
-        return self.text
+        return self._text
 
 
 class _FakePage:
