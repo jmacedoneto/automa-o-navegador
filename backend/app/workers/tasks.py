@@ -3,19 +3,37 @@ Celery tasks for async execution and delivery.
 """
 import asyncio
 import json
+import os
 import uuid as _uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.workers.celery_app import celery
 from app.core.database import get_db, get_setting
 from app.core.config import settings
 from app.automation.runner import NavRunner, NavRunnerConfig
 from app.automation.models import Step
+from app.automation.credentials import resolve_credentials
 from app.services.browser_executor import execute_automation
 from app.services.computer_agent import run_agent
 from app.services.integrations.webhook import send_webhook
 from app.services.integrations.whatsapp import send_whatsapp
 from app.services.integrations.sheets import append_row
+
+
+def __getattr__(name):
+    """Lazy module-level attribute (PEP 562).
+
+    `cotacao_pvs.automacao` imports back into `app.workers.tasks`, so a
+    top-level import here would be circular. Exposing the driver as
+    `executar_cotacao_pvs_inner` via `__getattr__` keeps it patchable
+    in tests while deferring the actual import to first access.
+    """
+    if name == "executar_cotacao_pvs_inner":
+        from cotacao_pvs.automacao import executar_cotacao_pvs as _inner
+        globals()["executar_cotacao_pvs_inner"] = _inner
+        return _inner
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _run(coro):
@@ -301,6 +319,24 @@ def run_automation_v2(automation_name: str, steps_payload: list[dict], inputs: d
         raise
     finally:
         set_step_log_writer(None)  # release the hook
+
+
+@celery.task(name="app.workers.tasks.executar_cotacao_pvs", time_limit=21600, soft_time_limit=21570)
+def executar_cotacao_pvs(veiculos_path: str | None = None):
+    """P1b entrypoint: read veiculos_referencia.json, dispatch one
+    NavRunner v2 task per (vehicle × region) combo.
+
+    `veiculos_path` is the OPTIONAL path to a JSON file. Default is the
+    legacy cotacao_pvs/veiculos_referencia.json (mounted volume).
+    """
+    credentials = resolve_credentials()
+    summary = _run(executar_cotacao_pvs_inner(
+        veiculos_path=Path(veiculos_path) if veiculos_path else None,
+        credentials=credentials,
+        supabase_key=os.environ.get("SUPABASE_KEY", ""),
+        automation_name="cotacao_pvs",
+    ))
+    return summary
 
 
 def _deliver_outputs(outputs: list[dict], result: dict, automation_name: str) -> list[str]:
