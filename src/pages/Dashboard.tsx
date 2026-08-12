@@ -126,6 +126,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadAutomations();
+    const onCreated = () => loadAutomations();
+    window.addEventListener("automation-created", onCreated);
+    return () => window.removeEventListener("automation-created", onCreated);
   }, []);
 
   const loadAutomations = async () => {

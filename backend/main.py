@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from app.api.routes import settings, automations, executions, schedules, ai, trigger, recording, health, scrape
+from app.api.routes import settings, automations, executions, schedules, ai, trigger, recording, health, scrape, planner
 from app.api.routes.automation_import import router as automation_import_router
 from app.core.config import settings as app_settings
 from app.core.database import get_db
@@ -68,6 +68,7 @@ api.include_router(recording.router)
 api.include_router(health.router)
 api.include_router(scrape.router)
 api.include_router(automation_import_router)
+api.include_router(planner.router)
 
 app.mount("/api", api)
 
