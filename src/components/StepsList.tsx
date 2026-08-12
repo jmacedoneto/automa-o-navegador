@@ -16,11 +16,16 @@ interface StepsListProps {
 const actionOptions = [
   { value: 'navigate', label: 'Navegar' },
   { value: 'click', label: 'Clicar' },
+  { value: 'hover', label: 'Hover (passar mouse)' },
   { value: 'type', label: 'Digitar' },
+  { value: 'selectOption', label: 'Selecionar Opção' },
   { value: 'wait', label: 'Aguardar' },
   { value: 'waitForSelector', label: 'Aguardar Elemento' },
+  { value: 'scroll', label: 'Rolar Página' },
   { value: 'screenshot', label: 'Screenshot' },
   { value: 'extractTable', label: 'Extrair Tabela' },
+  { value: 'extractText', label: 'Extrair Texto' },
+  { value: 'download', label: 'Download' },
 ];
 
 export function StepsList({ steps, onStepsChange, isEditable = true }: StepsListProps) {
@@ -111,7 +116,7 @@ export function StepsList({ steps, onStepsChange, isEditable = true }: StepsList
                 <div className="flex-1 grid gap-3">
                   <div className="grid grid-cols-2 gap-3">
                     <Select
-                      value={step.action}
+                      value={step.action || "click"}
                       onValueChange={(value) => updateStep(index, 'action', value)}
                       disabled={!isEditable}
                     >
@@ -143,9 +148,13 @@ export function StepsList({ steps, onStepsChange, isEditable = true }: StepsList
                     disabled={!isEditable}
                   />
                   
-                  {(step.action === 'type' || step.action === 'navigate') && (
+                  {(step.action === 'type' || step.action === 'navigate' || step.action === 'selectOption') && (
                     <Input
-                      placeholder={step.action === 'navigate' ? 'URL' : 'Valor a digitar'}
+                      placeholder={
+                        step.action === 'navigate' ? 'URL'
+                        : step.action === 'selectOption' ? 'Valor ou texto da opção'
+                        : 'Valor a digitar'
+                      }
                       value={step.value || ''}
                       onChange={(e) => updateStep(index, 'value', e.target.value)}
                       disabled={!isEditable}

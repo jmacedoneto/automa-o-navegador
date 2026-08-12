@@ -1,112 +1,99 @@
+import { api } from "./api";
+import { ExecutionSession, ExecutionLog } from "@/types/automation";
 import { supabase } from "@/integrations/supabase/client";
-import { ExecutionSession } from "@/types/automation";
-
-export interface ExecuteOptions {
-  withLivePreview?: boolean;
-}
 
 export interface ExecuteResult {
   success: boolean;
+  task_id?: string;
   executionId?: string;
   liveUrl?: string;
-  totalSteps?: number;
-  stepsCompleted?: number;
-  extractedData?: Record<string, unknown>;
-  screenshots?: string[];
   error?: string;
 }
 
 export async function executeAutomation(
-  automationId: string, 
-  options: ExecuteOptions = {}
+  automationId: string,
+  variables: Record<string, unknown> = {}
 ): Promise<ExecuteResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('execute-automation', {
-      body: {
-        automationId,
-        withLivePreview: options.withLivePreview || false,
-      },
-    });
-
-    if (error) {
-      console.error('[executionService] Edge function error:', error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-
+    const data = await api.post<{ task_id: string; status: string; execution_id?: string; liveUrl?: string }>(
+      `/automations/${automationId}/execute`,
+      variables
+    );
     return {
-      success: data.success,
-      executionId: data.executionId,
+      success: true,
+      task_id: data.task_id,
+      executionId: data.execution_id,
       liveUrl: data.liveUrl,
-      totalSteps: data.totalSteps,
-      stepsCompleted: data.stepsCompleted,
-      extractedData: data.extractedData,
-      screenshots: data.screenshots,
-      error: data.error,
     };
-  } catch (error) {
-    console.error('[executionService] Unexpected error:', error);
+  } catch (err) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Erro desconhecido',
+      error: err instanceof Error ? err.message : "Erro desconhecido",
     };
   }
 }
 
-export async function getExecutionStatus(executionId: string): Promise<ExecutionSession | null> {
+const FINAL_STATUSES = new Set(["success", "completed", "failed"]);
+
+export async function getExecutionStatus(logId: string): Promise<ExecutionSession | null> {
   try {
-    const { data, error } = await supabase
-      .from('execution_logs')
-      .select('*')
-      .eq('id', executionId)
-      .single();
-
-    if (error || !data) {
-      console.error('[executionService] Failed to get execution status:', error);
-      return null;
-    }
-
+    const log = await api.get<ExecutionLog>(`/executions/${logId}`);
     return {
-      executionId: data.id,
-      status: data.status as ExecutionSession['status'],
-      currentStep: data.steps_completed || 0,
-      totalSteps: data.total_steps || 0,
+      executionId: log.id,
+      status: log.status as ExecutionSession["status"],
+      currentStep: log.steps_completed || 0,
+      totalSteps: log.total_steps || 0,
+      latestScreenshot: log.screenshots?.length ? log.screenshots[log.screenshots.length - 1] : undefined,
     };
-  } catch (error) {
-    console.error('[executionService] Error fetching execution status:', error);
+  } catch {
     return null;
   }
 }
 
+/**
+ * Poll the FastAPI backend every 2s until the execution reaches a final state.
+ * Falls back to Supabase Realtime as a bonus if it happens to work.
+ */
 export function subscribeToExecution(
   executionId: string,
   onUpdate: (session: ExecutionSession) => void
 ): () => void {
+  let stopped = false;
+
+  const poll = async () => {
+    while (!stopped) {
+      await new Promise(r => setTimeout(r, 2000));
+      if (stopped) break;
+      const status = await getExecutionStatus(executionId);
+      if (!status) continue;
+      onUpdate(status);
+      if (FINAL_STATUSES.has(status.status)) break;
+    }
+  };
+
+  poll();
+
+  // Also try Supabase Realtime as a bonus (instant updates when it works)
   const channel = supabase
     .channel(`execution-${executionId}`)
     .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'execution_logs',
-        filter: `id=eq.${executionId}`,
-      },
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "execution_logs", filter: `id=eq.${executionId}` },
       (payload) => {
-        const data = payload.new as any;
+        const data = payload.new as Record<string, unknown>;
         onUpdate({
-          executionId: data.id,
-          status: data.status,
-          currentStep: data.steps_completed || 0,
-          totalSteps: data.total_steps || 0,
+          executionId: data.id as string,
+          status: data.status as ExecutionSession["status"],
+          currentStep: (data.steps_completed as number) || 0,
+          totalSteps: (data.total_steps as number) || 0,
+          latestScreenshot: (() => { const s = data.screenshots as string[] | undefined; return s?.length ? s[s.length - 1] : undefined; })(),
         });
       }
     )
     .subscribe();
 
   return () => {
+    stopped = true;
     supabase.removeChannel(channel);
   };
 }

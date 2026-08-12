@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Automation } from "@/types/automation";
+import { Automation, Schedule } from "@/types/automation";
 import { AutomationCard } from "./AutomationCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,20 +10,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface AutomationListProps {
   automations: Automation[];
+  schedulesMap?: Record<string, Schedule[]>;
   isLoading: boolean;
   onDelete: (id: string) => void;
+  onClone: (id: string) => void;
   onToggleStatus: (id: string, isActive: boolean) => void;
   onExecute: (id: string, withLivePreview?: boolean) => void;
 }
 
 type FilterStatus = 'all' | 'active' | 'inactive';
 
-export function AutomationList({ 
-  automations, 
+export function AutomationList({
+  automations,
+  schedulesMap = {},
   isLoading,
-  onDelete, 
-  onToggleStatus, 
-  onExecute 
+  onDelete,
+  onClone,
+  onToggleStatus,
+  onExecute
 }: AutomationListProps) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -65,7 +69,6 @@ export function AutomationList({
 
   return (
     <div className="space-y-6">
-      {/* Header com busca e filtros */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex flex-1 gap-2 w-full sm:w-auto">
           <div className="relative flex-1 max-w-sm">
@@ -98,7 +101,6 @@ export function AutomationList({
         </Button>
       </div>
 
-      {/* Lista de automações */}
       {filteredAutomations.length === 0 ? (
         <div className="text-center py-16 px-4">
           <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-accent/20 mb-6">
@@ -127,8 +129,10 @@ export function AutomationList({
             <AutomationCard
               key={automation.id}
               automation={automation}
+              schedules={schedulesMap[automation.id] || []}
               onEdit={handleEdit}
               onDelete={onDelete}
+              onClone={onClone}
               onToggleStatus={onToggleStatus}
               onExecute={onExecute}
             />

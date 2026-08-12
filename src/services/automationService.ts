@@ -1,207 +1,129 @@
-import { supabase } from "@/integrations/supabase/client";
-import { Automation, AutomationStep, Schedule, ExecutionLog } from "@/types/automation";
+import { api } from "./api";
+import { Automation, AutomationStep, Schedule, ExecutionLog, AutomationOutput } from "@/types/automation";
 
-// ============ AUTOMATIONS ============
+// ── Automations ────────────────────────────────────────────────────────────
 
 export async function fetchAutomations(): Promise<Automation[]> {
-  const { data, error } = await supabase
-    .from('automations')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  
-  return (data || []).map(item => ({
-    ...item,
-    steps: (item.steps as unknown as AutomationStep[]) || [],
-    credentials: item.credentials as Automation['credentials'],
-    last_execution_status: item.last_execution_status as Automation['last_execution_status'],
-  }));
+  return api.get<Automation[]>("/automations");
 }
 
 export async function fetchAutomationById(id: string): Promise<Automation | null> {
-  const { data, error } = await supabase
-    .from('automations')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
+  try {
+    return await api.get<Automation>(`/automations/${id}`);
+  } catch {
+    return null;
   }
-  
-  return {
-    ...data,
-    steps: (data.steps as unknown as AutomationStep[]) || [],
-    credentials: data.credentials as Automation['credentials'],
-    last_execution_status: data.last_execution_status as Automation['last_execution_status'],
-  };
 }
 
-export async function createAutomation(automation: Omit<Automation, 'id' | 'created_at' | 'updated_at'>): Promise<Automation> {
-  const { data, error } = await supabase
-    .from('automations')
-    .insert([{
-      name: automation.name,
-      description: automation.description,
-      erp_url: automation.erp_url,
-      browserless_url: automation.browserless_url,
-      sheets_url: automation.sheets_url,
-      instructions: automation.instructions,
-      steps: JSON.parse(JSON.stringify(automation.steps)),
-      is_active: automation.is_active,
-      webhook_url: automation.webhook_url,
-      webhook_secret: automation.webhook_secret,
-      credentials: automation.credentials,
-    }])
-    .select()
-    .single();
-
-  if (error) throw error;
-  
-  return {
-    ...data,
-    steps: (data.steps as unknown as AutomationStep[]) || [],
-    credentials: data.credentials as Automation['credentials'],
-    last_execution_status: data.last_execution_status as Automation['last_execution_status'],
-  };
+export async function createAutomation(
+  data: Omit<Automation, "id" | "created_at" | "updated_at">
+): Promise<Automation> {
+  return api.post<Automation>("/automations", data);
 }
 
-export async function updateAutomation(id: string, updates: Partial<Automation>): Promise<Automation> {
-  const updateData: Record<string, unknown> = {};
-  
-  if (updates.name !== undefined) updateData.name = updates.name;
-  if (updates.description !== undefined) updateData.description = updates.description;
-  if (updates.erp_url !== undefined) updateData.erp_url = updates.erp_url;
-  if (updates.browserless_url !== undefined) updateData.browserless_url = updates.browserless_url;
-  if (updates.sheets_url !== undefined) updateData.sheets_url = updates.sheets_url;
-  if (updates.instructions !== undefined) updateData.instructions = updates.instructions;
-  if (updates.steps !== undefined) updateData.steps = JSON.parse(JSON.stringify(updates.steps));
-  if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
-  if (updates.webhook_url !== undefined) updateData.webhook_url = updates.webhook_url;
-  if (updates.webhook_secret !== undefined) updateData.webhook_secret = updates.webhook_secret;
-  if (updates.credentials !== undefined) updateData.credentials = updates.credentials;
-
-  const { data, error } = await supabase
-    .from('automations')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  
-  return {
-    ...data,
-    steps: (data.steps as unknown as AutomationStep[]) || [],
-    credentials: data.credentials as Automation['credentials'],
-    last_execution_status: data.last_execution_status as Automation['last_execution_status'],
-  };
+export async function updateAutomation(
+  id: string,
+  data: Partial<Omit<Automation, "id" | "created_at" | "updated_at">>
+): Promise<Automation> {
+  return api.put<Automation>(`/automations/${id}`, data);
 }
 
 export async function deleteAutomation(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('automations')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  return api.delete(`/automations/${id}`);
 }
 
 export async function toggleAutomationStatus(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('automations')
-    .update({ is_active: isActive })
-    .eq('id', id);
-
-  if (error) throw error;
+  await api.put(`/automations/${id}`, { is_active: isActive });
 }
 
-// ============ SCHEDULES ============
+export async function importSteps(id: string, steps: AutomationStep[]): Promise<{ imported: number }> {
+  return api.post(`/automations/${id}/import-steps`, steps);
+}
+
+export async function cloneAutomation(id: string): Promise<Automation> {
+  return api.post<Automation>(`/automations/${id}/clone`);
+}
+
+export async function parseSeleniumCsv(csv: string): Promise<{ steps: AutomationStep[]; count: number }> {
+  return api.post("/automations/parse-selenium", { csv });
+}
+
+export async function importChromeRecording(recording: object): Promise<{ steps: AutomationStep[]; count: number }> {
+  return api.post("/automations/import-chrome-recorder", { recording });
+}
+
+export async function runAiAgent(automationId: string, prompt: string): Promise<{ task_id: string; execution_id: string }> {
+  return api.post(`/automations/${automationId}/run-agent`, { prompt });
+}
+
+export async function cancelExecution(logId: string): Promise<{ ok: boolean }> {
+  return api.post(`/executions/${logId}/cancel`, {});
+}
+
+// ── Schedules ──────────────────────────────────────────────────────────────
+
+export async function fetchAllSchedules(): Promise<Schedule[]> {
+  return api.get<Schedule[]>("/schedules");
+}
 
 export async function fetchSchedulesByAutomation(automationId: string): Promise<Schedule[]> {
-  const { data, error } = await supabase
-    .from('schedules')
-    .select('*')
-    .eq('automation_id', automationId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  
-  return (data || []).map(item => ({
-    ...item,
-    schedule_type: item.schedule_type as Schedule['schedule_type'],
-  }));
+  return api.get<Schedule[]>(`/schedules?automation_id=${automationId}`);
 }
 
-export async function createSchedule(schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>): Promise<Schedule> {
-  const { data, error } = await supabase
-    .from('schedules')
-    .insert([schedule])
-    .select()
-    .single();
+export async function createSchedule(
+  schedule: Omit<Schedule, "id" | "created_at">
+): Promise<Schedule> {
+  return api.post<Schedule>("/schedules", schedule);
+}
 
-  if (error) throw error;
-  
-  return {
-    ...data,
-    schedule_type: data.schedule_type as Schedule['schedule_type'],
-  };
+export async function updateSchedule(id: string, data: Partial<Schedule>): Promise<Schedule> {
+  return api.put<Schedule>(`/schedules/${id}`, data);
+}
+
+export async function toggleSchedule(id: string): Promise<{ is_active: boolean }> {
+  return api.patch(`/schedules/${id}/toggle`);
 }
 
 export async function deleteSchedule(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('schedules')
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  return api.delete(`/schedules/${id}`);
 }
 
-// ============ EXECUTION LOGS ============
+// ── Execution logs ─────────────────────────────────────────────────────────
 
-export async function fetchExecutionLogs(automationId: string, limit = 20): Promise<ExecutionLog[]> {
-  const { data, error } = await supabase
-    .from('execution_logs')
-    .select('*')
-    .eq('automation_id', automationId)
-    .order('started_at', { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  
-  return (data || []).map(item => ({
-    ...item,
-    status: item.status as ExecutionLog['status'],
-    screenshots: (item.screenshots as string[]) || [],
-    extracted_data: (item.extracted_data as Record<string, unknown>) || {},
-    webhook_response: item.webhook_response as Record<string, unknown> | undefined,
-  }));
+export async function fetchExecutionLogs(automationId?: string, limit = 50): Promise<ExecutionLog[]> {
+  const qs = [
+    automationId ? `automation_id=${automationId}` : "",
+    `limit=${limit}`,
+  ].filter(Boolean).join("&");
+  return api.get<ExecutionLog[]>(`/executions?${qs}`);
 }
 
-// ============ GENERATE STEPS ============
-
-interface MediaInput {
-  type: 'audio' | 'image' | 'video';
-  url: string;
-  name: string;
+export async function fetchExecutionLog(logId: string): Promise<ExecutionLog> {
+  return api.get<ExecutionLog>(`/executions/${logId}`);
 }
+
+// ── AI ─────────────────────────────────────────────────────────────────────
 
 export async function generateSteps(
-  instructions: string, 
-  erpUrl?: string,
-  mediaFiles?: MediaInput[]
+  instructions: string,
+  context?: string
 ): Promise<{ steps: AutomationStep[]; notes: string }> {
-  const { data, error } = await supabase.functions.invoke('generate-steps', {
-    body: { instructions, erpUrl, mediaFiles }
+  const data = await api.post<{ steps: AutomationStep[] }>("/ai/generate-steps", {
+    instructions,
+    context: context || "",
   });
+  return { steps: data.steps, notes: "" };
+}
 
-  if (error) throw error;
-  if (data.error) throw new Error(data.error);
-
-  return {
-    steps: data.steps || [],
-    notes: data.notes || "",
-  };
+export async function fillVariables(
+  placeholders: string[],
+  contextData: Record<string, unknown>,
+  instructions?: string
+): Promise<Record<string, string>> {
+  const data = await api.post<{ resolved: Record<string, string> }>("/ai/fill-variables", {
+    placeholders,
+    context_data: contextData,
+    instructions: instructions || "",
+  });
+  return data.resolved;
 }

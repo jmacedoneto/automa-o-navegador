@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Automation, AutomationStep } from "@/types/automation";
+import { Automation, Schedule } from "@/types/automation";
 import { AutomationList } from "@/components/automation/AutomationList";
 import { LivePreviewModal } from "@/components/automation/LivePreviewModal";
-import { RecordingModal } from "@/components/automation/RecordingModal";
-import { 
-  fetchAutomations, 
-  deleteAutomation, 
-  toggleAutomationStatus 
+import {
+  fetchAutomations,
+  fetchAllSchedules,
+  deleteAutomation,
+  toggleAutomationStatus,
+  cloneAutomation,
 } from "@/services/automationService";
 import { executeAutomation } from "@/services/executionService";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
-import { Button } from "@/components/ui/button";
-import { Plus, Video } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CheckCircle2, XCircle, Loader2, RefreshCw, Key, Globe, Cpu, Bot } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +25,86 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// ── Health Panel ──────────────────────────────────────────────────────────────
+
+type HealthStatus = {
+  api: boolean;
+  browserless: boolean;
+  openai_key: boolean;
+  celery: boolean;
+} | null;
+
+function HealthPanel() {
+  const [status, setStatus] = useState<HealthStatus>(null);
+  const [loading, setLoading] = useState(true);
+
+  const check = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/health/status");
+      if (res.ok) setStatus(await res.json());
+    } catch {
+      setStatus(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const Item = ({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) => (
+    <div className="flex items-center gap-2 text-sm" title={hint}>
+      {ok
+        ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+        : <XCircle className="h-4 w-4 text-destructive shrink-0" />}
+      <span className={ok ? "text-foreground" : "text-destructive"}>{label}</span>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Verificando sistema...
+      </div>
+    );
+  }
+
+  if (!status) return null;
+
+  const allOk = status.api && status.browserless && status.openai_key && status.celery;
+
+  return (
+    <div className={`mb-6 rounded-lg border px-4 py-3 ${allOk ? "border-green-500/20 bg-green-500/5" : "border-destructive/20 bg-destructive/5"}`}>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-6 flex-wrap">
+          <Item ok={status.api} label="API" hint="Backend FastAPI" />
+          <Item ok={status.celery} label="Workers" hint="Celery task queue" />
+          <Item ok={status.browserless} label="Browserless" hint="Chrome headless" />
+          <Item
+            ok={status.openai_key}
+            label={status.openai_key ? "OpenAI configurada" : "OpenAI sem chave"}
+            hint={status.openai_key ? "API Key configurada" : "Configure em Configurações"}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          {!allOk && (
+            <Link to="/settings" className="text-xs text-primary underline underline-offset-2">
+              Corrigir em Configurações
+            </Link>
+          )}
+          <button onClick={check} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <RefreshCw className="h-3 w-3" /> Atualizar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface LivePreviewState {
   isOpen: boolean;
   liveUrl: string | null;
@@ -33,11 +113,10 @@ interface LivePreviewState {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const [automations, setAutomations] = useState<Automation[]>([]);
+  const [schedulesMap, setSchedulesMap] = useState<Record<string, Schedule[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [livePreview, setLivePreview] = useState<LivePreviewState>({
     isOpen: false,
     liveUrl: null,
@@ -51,8 +130,17 @@ export default function Dashboard() {
 
   const loadAutomations = async () => {
     try {
-      const data = await fetchAutomations();
+      const [data, allSchedules] = await Promise.all([
+        fetchAutomations(),
+        fetchAllSchedules().catch(() => [] as Schedule[]),
+      ]);
       setAutomations(data);
+      const map: Record<string, Schedule[]> = {};
+      for (const s of allSchedules) {
+        if (!map[s.automation_id]) map[s.automation_id] = [];
+        map[s.automation_id].push(s);
+      }
+      setSchedulesMap(map);
     } catch (error) {
       console.error("Error loading automations:", error);
       toast.error("Erro ao carregar automações");
@@ -63,7 +151,6 @@ export default function Dashboard() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    
     try {
       await deleteAutomation(deleteId);
       setAutomations((prev) => prev.filter((a) => a.id !== deleteId));
@@ -89,11 +176,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleClone = async (id: string) => {
+    try {
+      await cloneAutomation(id);
+      toast.success("Automação clonada com sucesso!");
+      loadAutomations();
+    } catch {
+      toast.error("Erro ao clonar automação");
+    }
+  };
+
   const handleExecute = async (id: string, withLivePreview: boolean = false) => {
     const automation = automations.find(a => a.id === id);
-    
+
     if (withLivePreview) {
-      // Open modal immediately with loading state
       setLivePreview({
         isOpen: true,
         liveUrl: null,
@@ -103,104 +199,64 @@ export default function Dashboard() {
     }
 
     toast.info(withLivePreview ? "Iniciando com Live Preview..." : "Executando automação...");
-    
+
     try {
       const result = await executeAutomation(id, { withLivePreview });
-      
+
       if (!result.success) {
         toast.error(result.error || "Erro ao executar automação");
-        if (withLivePreview) {
-          setLivePreview(prev => ({ ...prev, isOpen: false }));
-        }
+        if (withLivePreview) setLivePreview(prev => ({ ...prev, isOpen: false }));
         return;
       }
 
-      if (withLivePreview && result.liveUrl) {
+      if (withLivePreview) {
         setLivePreview(prev => ({
           ...prev,
           liveUrl: result.liveUrl || null,
           executionId: result.executionId || null,
         }));
-      } else if (!withLivePreview) {
+      } else {
         toast.success("Execução iniciada com sucesso!");
       }
 
-      // Reload automations to update status
       loadAutomations();
     } catch (error) {
       console.error("Error executing automation:", error);
       toast.error("Erro ao executar automação");
-      if (withLivePreview) {
-        setLivePreview(prev => ({ ...prev, isOpen: false }));
-      }
+      if (withLivePreview) setLivePreview(prev => ({ ...prev, isOpen: false }));
     }
   };
 
   const handleCloseLivePreview = () => {
-    setLivePreview({
-      isOpen: false,
-      liveUrl: null,
-      automationName: '',
-      executionId: null,
-    });
-    // Reload to get updated execution status
+    setLivePreview({ isOpen: false, liveUrl: null, automationName: '', executionId: null });
     loadAutomations();
-  };
-
-  const handleStepsGenerated = (steps: AutomationStep[], erpUrl: string, notes?: string) => {
-    // Navigate to the automation editor with pre-populated steps
-    navigate('/automation/new', {
-      state: {
-        prePopulatedSteps: steps,
-        prePopulatedErpUrl: erpUrl,
-        prePopulatedNotes: notes,
-        fromRecording: true,
-      },
-    });
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Main content */}
       <main className="container py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground mt-1">
-              Gerencie suas automações de extração de dados
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsRecordingModalOpen(true)}
-              className="gap-2"
-            >
-              <Video className="h-4 w-4" />
-              Gravar Automação
-            </Button>
-            <Button
-              onClick={() => navigate('/automation/new')}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Nova Automação
-            </Button>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie suas automações de extração de dados
+          </p>
         </div>
+
+        <HealthPanel />
 
         <AutomationList
           automations={automations}
+          schedulesMap={schedulesMap}
           isLoading={isLoading}
           onDelete={(id) => setDeleteId(id)}
+          onClone={handleClone}
           onToggleStatus={handleToggleStatus}
           onExecute={handleExecute}
         />
       </main>
 
-      {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -222,20 +278,12 @@ export default function Dashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Live Preview Modal */}
       <LivePreviewModal
         isOpen={livePreview.isOpen}
         onClose={handleCloseLivePreview}
         liveUrl={livePreview.liveUrl}
         automationName={livePreview.automationName}
         executionId={livePreview.executionId}
-      />
-
-      {/* Recording Modal */}
-      <RecordingModal
-        isOpen={isRecordingModalOpen}
-        onClose={() => setIsRecordingModalOpen(false)}
-        onStepsGenerated={handleStepsGenerated}
       />
     </div>
   );

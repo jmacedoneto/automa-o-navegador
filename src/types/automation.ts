@@ -9,7 +9,7 @@ export interface AutomationStep {
   waitTime?: number;
 }
 
-export type ScheduleType = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval';
+export type ScheduleType = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval' | 'cron';
 export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
 export type MediaType = 'image' | 'audio' | 'video';
 

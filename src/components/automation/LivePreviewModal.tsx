@@ -9,14 +9,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Monitor, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Monitor,
+  CheckCircle2,
+  XCircle,
   Loader2,
-  ExternalLink,
   X,
-  AlertCircle,
   History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,18 +42,11 @@ export function LivePreviewModal({
     status: 'starting',
     currentStep: 0,
     totalSteps: 0,
+    latestScreenshot: undefined,
   });
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeError, setIframeError] = useState(false);
-  const [newWindowOpened, setNewWindowOpened] = useState(false);
 
   useEffect(() => {
     if (!executionId || !isOpen) return;
-
-    // Reset states when opening
-    setIframeLoaded(false);
-    setIframeError(false);
-    setNewWindowOpened(false);
 
     // Initial fetch
     getExecutionStatus(executionId).then((status) => {
@@ -74,18 +65,6 @@ export function LivePreviewModal({
     };
   }, [executionId, isOpen]);
 
-  // Auto-check iframe loading after timeout
-  useEffect(() => {
-    if (!liveUrl || iframeLoaded || iframeError) return;
-    
-    const timeout = setTimeout(() => {
-      if (!iframeLoaded) {
-        setIframeError(true);
-      }
-    }, 5000); // 5 seconds timeout
-
-    return () => clearTimeout(timeout);
-  }, [liveUrl, iframeLoaded, iframeError]);
 
   const getStatusConfig = () => {
     switch (session.status) {
@@ -139,17 +118,6 @@ export function LivePreviewModal({
     ? (session.currentStep / session.totalSteps) * 100 
     : 0;
 
-  const handleOpenNewWindow = () => {
-    if (liveUrl) {
-      window.open(liveUrl, '_blank', 'width=1280,height=720,menubar=no,toolbar=no');
-      setNewWindowOpened(true);
-    }
-  };
-
-  const handleIframeLoad = () => {
-    setIframeLoaded(true);
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 gap-0">
@@ -174,17 +142,6 @@ export function LivePreviewModal({
                 <StatusIcon className={cn("h-3.5 w-3.5", statusConfig.animate && "animate-spin")} />
                 {statusConfig.label}
               </Badge>
-              {liveUrl && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleOpenNewWindow}
-                  className="gap-1.5"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Nova Janela
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -207,90 +164,61 @@ export function LivePreviewModal({
           </div>
         </DialogHeader>
 
-        {/* Live preview iframe */}
-        <div className="flex-1 relative bg-muted/30">
-          {!liveUrl ? (
+        {/* Live preview area */}
+        <div className="flex-1 relative bg-muted/30 overflow-hidden">
+          {session.latestScreenshot ? (
+            <>
+              <img
+                src={`data:image/png;base64,${session.latestScreenshot}`}
+                alt="Browser screenshot"
+                className="w-full h-full object-contain"
+              />
+              {/* Live indicator */}
+              {(session.status === 'running' || session.status === 'starting') && (
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-full text-sm font-medium">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                  </span>
+                  AO VIVO
+                </div>
+              )}
+            </>
+          ) : (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-                <p className="text-muted-foreground">
-                  Conectando ao Browserless...
-                </p>
-              </div>
-            </div>
-          ) : iframeError || newWindowOpened ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center space-y-4 max-w-md px-4">
-                {newWindowOpened ? (
+              <div className="text-center space-y-4 max-w-sm px-4">
+                {session.status === 'starting' || session.status === 'queued' ? (
                   <>
-                    <ExternalLink className="h-12 w-12 text-info mx-auto" />
-                    <div>
-                      <h3 className="font-medium text-lg">Visualização aberta em nova janela</h3>
-                      <p className="text-muted-foreground text-sm mt-1">
-                        A execução está sendo exibida em uma janela separada. 
-                        Você pode acompanhar o progresso aqui.
-                      </p>
-                    </div>
+                    <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+                    <p className="text-muted-foreground font-medium">Iniciando automação...</p>
+                    <p className="text-sm text-muted-foreground">O browser será exibido assim que a primeira página carregar</p>
+                  </>
+                ) : session.status === 'running' ? (
+                  <>
+                    <Monitor className="h-10 w-10 text-warning mx-auto" />
+                    <p className="text-muted-foreground font-medium">Executando passos...</p>
+                    <p className="text-sm text-muted-foreground">
+                      {session.currentStep} de {session.totalSteps} passos concluídos
+                    </p>
+                    <p className="text-xs text-muted-foreground">A captura de tela aparecerá após o primeiro acesso a uma página</p>
+                  </>
+                ) : session.status === 'success' || session.status === 'completed' ? (
+                  <>
+                    <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
+                    <p className="font-medium text-success">Execução concluída!</p>
+                  </>
+                ) : session.status === 'failed' ? (
+                  <>
+                    <XCircle className="h-10 w-10 text-destructive mx-auto" />
+                    <p className="font-medium text-destructive">Execução falhou</p>
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="h-12 w-12 text-warning mx-auto" />
-                    <div>
-                      <h3 className="font-medium text-lg">Visualização via Chrome DevTools</h3>
-                      <p className="text-muted-foreground text-sm mt-1">
-                        Por questões de segurança, a visualização é feita através do Chrome DevTools.
-                        Clique abaixo para abrir em uma nova janela.
-                      </p>
-                    </div>
-                    <Button onClick={handleOpenNewWindow} className="gap-2">
-                      <ExternalLink className="h-4 w-4" />
-                      Abrir Chrome DevTools
-                    </Button>
+                    <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+                    <p className="text-muted-foreground">Aguardando...</p>
                   </>
                 )}
-                
-                {/* Progress indicator inline */}
-                <div className="pt-4 border-t mt-4">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Status: {statusConfig.label}
-                  </p>
-                  <Progress value={progressPercent} className="h-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {session.currentStep} de {session.totalSteps} passos
-                  </p>
-                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {!iframeLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
-                  <div className="text-center space-y-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-                    <p className="text-muted-foreground">
-                      Carregando visualização...
-                    </p>
-                  </div>
-                </div>
-              )}
-              <iframe
-                src={liveUrl}
-                className="w-full h-full border-0"
-                onLoad={handleIframeLoad}
-                onError={() => setIframeError(true)}
-                title="Live Preview"
-              />
-            </>
-          )}
-          
-          {/* Live indicator */}
-          {liveUrl && session.status === 'running' && !iframeError && !newWindowOpened && (
-            <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-full text-sm font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-              </span>
-              AO VIVO
             </div>
           )}
         </div>
