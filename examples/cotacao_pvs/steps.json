@@ -1,0 +1,174 @@
+{
+  "automation_name": "cotacao_pvs",
+  "version": 1,
+  "auth": {
+    "type": "form_login",
+    "url": "https://app.apvs.vc/home",
+    "credentials_ref": "apvs_login",
+    "selectors": {
+      "user": "input[type=text]",
+      "pass": "input[type=password]",
+      "submit": "ion-button"
+    },
+    "success_assert": {"selector": ".dashboard", "timeout_ms": 30000}
+  },
+  "steps": [
+    {
+      "id": "click_consultor",
+      "run_python": {
+        "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'CONSULTOR')",
+        "timeout_ms": 30000
+      },
+      "retry": {"attempts": 2, "initial_delay_ms": 2000}
+    },
+    {
+      "id": "fill_credentials",
+      "run_python": {
+        "value": "from cotacao_pvs.ionic_helpers import js_set_input; await js_set_input(page, 'input[type=text]', inputs['cnpj']); await js_set_input(page, 'input[type=password]', inputs['password'])",
+        "timeout_ms": 30000
+      }
+    },
+    {
+      "id": "click_entrar",
+      "run_python": {
+        "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'Entrar')",
+        "timeout_ms": 30000
+      }
+    },
+    {
+      "id": "wait_dashboard",
+      "wait_for": {"selector": ".dashboard", "timeout_ms": 30000}
+    },
+    {
+      "id": "loop_over_combo",
+      "for_each": {
+        "items": "{{input.combos}}",
+        "as": "combo",
+        "max_iterations": 100,
+        "steps": [
+          {
+            "id": "go_to_dashboard",
+            "goto": "{{combo.dashboard_url}}"
+          },
+          {
+            "id": "click_nova_cotacao",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import click_ion_item; await click_ion_item(page, 'Nova Cotação')",
+              "timeout_ms": 15000
+            }
+          },
+          {
+            "id": "click_codigo_fipe",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'Código Fipe')",
+              "timeout_ms": 15000
+            }
+          },
+          {
+            "id": "type_fipe_code",
+            "run_python": {
+              "value": "inp = await page.query_selector('input[name=\"ion-input-0\"]'); await inp.click(); await page.keyboard.type(combo['fipe_code'], delay=80)",
+              "timeout_ms": 15000
+            },
+            "bind": "_typed"
+          },
+          {
+            "id": "click_proximo_step1",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'Próximo')",
+              "timeout_ms": 30000
+            }
+          },
+          {
+            "id": "verify_step2_advanced",
+            "run_python": {
+              "value": "assert '/2/' in page.url, f'expected /2/ in url, got {page.url}'",
+              "timeout_ms": 5000
+            }
+          },
+          {
+            "id": "fill_step2_data",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import get_selectable_value, select_ionic, select_ionic_by_label, fill_input_by_label, js_set_input; import asyncio\nyear = await get_selectable_value(page, 'year') or '2020'\nsel = await get_selectable_value(page, 'version')\nif not sel: raise RuntimeError('model not loaded after 120s')\nres = await select_ionic(page, 'year', year) or await select_ionic(page, 'manufactureYear', year) or await select_ionic_by_label(page, 'Ano Modelo', year) or await select_ionic_by_label(page, 'Ano de Fabricação', year)\nif not res: raise RuntimeError('year field not fillable')\nawait select_ionic(page, 'state', inputs['estado']) or await select_ionic_by_label(page, 'Estado', inputs['estado'])\nawait select_ionic(page, 'city', combo['cidade'], use_search=True) or await select_ionic_by_label(page, 'Cidade', combo['cidade'], use_search=True)\nfor name, label, val in [('ion-input-1', 'Nome', 'Teste Automacao'), ('ion-input-2', 'Celular', '71999999999'), ('ion-input-3', 'Email', 'teste@teste.com')]:\n    el = await page.query_selector(f'input[name=\"{name}\"]')\n    if el:\n        await el.click(); await el.fill(''); await page.keyboard.type(val, delay=20)\n    else:\n        await fill_input_by_label(page, label, val)\nawait asyncio.sleep(1)",
+              "timeout_ms": 120000
+            }
+          },
+          {
+            "id": "click_proximo_step2",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'Próximo')",
+              "timeout_ms": 30000
+            }
+          },
+          {
+            "id": "verify_step3_advanced",
+            "run_python": {
+              "value": "assert '/3/' in page.url, f'expected /3/ in url, got {page.url}'",
+              "timeout_ms": 5000
+            }
+          },
+          {
+            "id": "step3_set_blindado_nao",
+            "run_python": {
+              "value": "await page.evaluate('''() => { const f = Array.from(document.querySelectorAll('form')).find(f => !f.closest('.ion-page-hidden')); if (!f) return; for (const col of f.querySelectorAll('ion-col')) { const label = col.querySelector('ion-label')?.innerText || ''; if (label.toLowerCase().includes('blindado')) { for (const b of col.querySelectorAll('ion-button')) if (b.innerText.trim() === 'Não') { b.click(); return; } } } }''')",
+              "timeout_ms": 15000
+            }
+          },
+          {
+            "id": "step3_set_importado_nao",
+            "run_python": {
+              "value": "await page.evaluate('''() => { const f = Array.from(document.querySelectorAll('form')).find(f => !f.closest('.ion-page-hidden')); if (!f) return; for (const col of f.querySelectorAll('ion-col')) { const label = col.querySelector('ion-label')?.innerText || ''; if (label.includes('Importado')) { for (const b of col.querySelectorAll('ion-button')) if (b.innerText.trim() === 'Não') { b.click(); return; } } } }''')",
+              "timeout_ms": 15000
+            }
+          },
+          {
+            "id": "step3_set_utilizacao_particular",
+            "run_python": {
+              "value": "await page.evaluate('''() => { const f = Array.from(document.querySelectorAll('form')).find(f => !f.closest('.ion-page-hidden')); const sel = f?.querySelector('ion-select[formcontrolname=\"vehicleUse\"]'); if (sel) sel.click(); }'''); await page.wait_for_timeout(3000); await page.evaluate('''() => { for (const alert of document.querySelectorAll('ion-alert')) { for (const btn of alert.querySelectorAll('button')) { if (btn.innerText.trim() === 'Particular') { btn.click(); return; } } } }'''); await page.wait_for_timeout(1000); await page.evaluate('''() => { for (const alert of document.querySelectorAll('ion-alert')) { const ok = Array.from(alert.querySelectorAll('button')).find(b => b.innerText.trim() === 'OK' || b.innerText.trim() === 'Confirmar'); if (ok) ok.click(); } }'''); await page.wait_for_timeout(2000)",
+              "timeout_ms": 30000
+            }
+          },
+          {
+            "id": "click_proximo_step3",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import click_ion_button; await click_ion_button(page, 'Próximo')",
+              "timeout_ms": 30000
+            }
+          },
+          {
+            "id": "extract_plano",
+            "run_python": {
+              "value": "from cotacao_pvs.ionic_helpers import extrair_menor_parcela; body = await page.evaluate('''() => { const pages = document.querySelectorAll('.ion-page:not(.ion-page-hidden)'); for (const p of pages) { if (p.innerText.includes('Planos') || p.innerText.includes('R$')) return p.innerText; } return ''; }'''); resultado = extrair_menor_parcela(body); bindings['resultado'] = resultado; bindings['combo_done'] = dict(combo); bindings['valor'] = resultado",
+              "timeout_ms": 30000
+            },
+            "bind": "resultado"
+          },
+          {
+            "id": "save_to_supabase",
+            "if": {
+              "condition": "bindings.get('resultado') is not None",
+              "then_steps": [
+                {
+                  "id": "patch_supabase",
+                  "run_python": {
+                    "value": "import httpx; from urllib.parse import quote; row = {'valor_prata': bindings['resultado'], 'erro': ''}; url = f\"https://supabase.apvsiguatemi.net/rest/v1/cotacoes_fipe?faixa_min=eq.{quote(str(combo['faixa_min']))}&faixa_max=eq.{quote(str(combo['faixa_max']))}&tipo=eq.{quote(str(combo['tipo']))}&regiao=eq.{quote(str(combo['regiao']))}\"; async with httpx.AsyncClient(timeout=15) as client: r = await client.patch(url, headers={'apikey': inputs['supabase_key'], 'Authorization': f'Bearer {inputs[\"supabase_key\"]}', 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'}, json=row); assert r.status_code in (200, 204), f'supabase patch failed: {r.status_code} {r.text}'",
+                    "timeout_ms": 30000
+                  }
+                }
+              ],
+              "else_steps": [
+                {
+                  "id": "mark_error",
+                  "run_python": {
+                    "value": "import httpx; from urllib.parse import quote; row = {'erro': 'sem_planos'}; url = f\"https://supabase.apvsiguatemi.net/rest/v1/cotacoes_fipe?faixa_min=eq.{quote(str(combo['faixa_min']))}&faixa_max=eq.{quote(str(combo['faixa_max']))}&tipo=eq.{quote(str(combo['tipo']))}&regiao=eq.{quote(str(combo['regiao']))}\"; async with httpx.AsyncClient(timeout=15) as client: r = await client.patch(url, headers={'apikey': inputs['supabase_key'], 'Authorization': f'Bearer {inputs[\"supabase_key\"]}', 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'}, json=row)",
+                    "timeout_ms": 30000
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
