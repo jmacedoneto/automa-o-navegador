@@ -1,14 +1,14 @@
 """Stdin/stdout entry point for the NavRunner MCP server.
 
-Run it via:
-    python -m backend.scripts.mcp_server_stdio
+Run it via (from the backend/ directory):
+    python -m scripts.mcp_server_stdio
 
 Or in a Claude Desktop config:
     {
       "mcpServers": {
         "navrunner": {
           "command": "python",
-          "args": ["-m", "backend.scripts.mcp_server_stdio"],
+          "args": ["-m", "scripts.mcp_server_stdio"],
           "cwd": "/root/navegador/automa-o-navegador/backend"
         }
       }
