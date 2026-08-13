@@ -35,7 +35,7 @@ with a JSON DSL, per-step retry, and observability hooks (Langfuse + MinIO).
 - **AI Planner (P6)** — `POST /api/planner/plan` accepts a description, returns a NavRunner DSL draft. UI: `AIPlannerCard` in the automation list (textarea + 2 inputs + generate + preview + save).
 - **Single-pane authoring (P9)** — `/create` page with 3 tabs (Manual / Record / AI Planner). Pick the mode that fits the task.
 - **Webhook trigger hardened (P7)** — `POST /api/trigger/{id}` accepts variables, validates required inputs against `steps` JSON (returns 400 with `missing_variables`), supports HMAC-SHA256 (via `webhook_secret` + `X-Signature` header) or simple token (`webhook_token` + `?token=` or `X-Token`). Returns `execution_id`, `task_id`, `automation_name`, `dispatched_at`, `variables_received`.
-- **MCP server (P8)** — Run as `python -m backend.scripts.mcp_server_stdio`. Exposes 8 tools: `list_automations`, `get_automation`, `list_runs`, `get_run_status`, `run_automation_now`, `create_automation`, `plan_automation`, `trigger_webhook`. Use from Claude Desktop / Cursor / any MCP client.
+- **MCP server (P8)** — Run as `python -m scripts.mcp_server_stdio` from `backend/`. Exposes 8 tools: `list_automations`, `get_automation`, `list_runs`, `get_run_status`, `run_automation_now`, `create_automation`, `plan_automation`, `trigger_webhook`. Use from Claude Desktop / Cursor / any MCP client.
 
 ### Deferred to later phases
 
