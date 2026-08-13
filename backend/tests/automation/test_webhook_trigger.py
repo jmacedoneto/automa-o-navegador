@@ -97,15 +97,24 @@ def test_webhook_hmac_signature(monkeypatch):
     monkeypatch.setattr("app.workers.tasks.run_automation", MagicMock(delay=MagicMock(return_value=MagicMock(id="t"))))
 
     body = {"variables": {"cnpj": "123"}}
+    # Send raw bytes (not json=) so the signature matches what the server sees.
     raw = json.dumps(body).encode()
     sig = hmac.new(b"shhh", raw, hashlib.sha256).hexdigest()
 
     # Bad signature → 401
-    resp = client.post("/api/trigger/auto-1", json=body, headers={"X-Signature": "deadbeef"})
+    resp = client.post(
+        "/api/trigger/auto-1",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-Signature": "deadbeef"},
+    )
     assert resp.status_code == 401
 
     # Good signature → 200
-    resp = client.post("/api/trigger/auto-1", json=body, headers={"X-Signature": sig})
+    resp = client.post(
+        "/api/trigger/auto-1",
+        content=raw,
+        headers={"Content-Type": "application/json", "X-Signature": sig},
+    )
     assert resp.status_code == 200
 
 
